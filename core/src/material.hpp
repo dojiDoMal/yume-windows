@@ -12,7 +12,7 @@ class Material {
     std::unique_ptr<ShaderAsset> vertexShader;
     std::unique_ptr<ShaderAsset> fragmentShader;
     std::unique_ptr<ShaderProgram> shaderProgram;
-    ColorRGBA baseColor = COLOR::GREEN;
+    ColorRGBA baseColor = COLOR::RED;
 
   public:
     Material();
