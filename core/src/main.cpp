@@ -84,11 +84,16 @@ void main_loop() {
 }
 #else
 void main_loop() {
+    static Uint64 lastTime = SDL_GetPerformanceCounter();
+    static float deltaTime = 0.0f;
 
-    float moveSpeed = 0.05f;
+    float moveSpeed = 2.0f;
 
     bool running = true;
     while (running) {
+        Uint64 currentTime = SDL_GetPerformanceCounter();
+        deltaTime = (float)(currentTime - lastTime) / SDL_GetPerformanceFrequency();
+        lastTime = currentTime;
 
         engine.getInputSystem().processEvents();
 
@@ -102,21 +107,22 @@ void main_loop() {
             Vector3 target = cam->getTarget();
             Vector3 delta = {0, 0, 0};
 
+            float frameSpeed = moveSpeed * deltaTime;
+
             if (engine.getInputSystem().isKeyPressed(SDLK_w))
-                delta.z -= moveSpeed;
+                delta.z -= frameSpeed;
             if (engine.getInputSystem().isKeyPressed(SDLK_s))
-                delta.z += moveSpeed;
+                delta.z += frameSpeed;
             if (engine.getInputSystem().isKeyPressed(SDLK_a))
-                delta.x -= moveSpeed;
+                delta.x -= frameSpeed;
             if (engine.getInputSystem().isKeyPressed(SDLK_d))
-                delta.x += moveSpeed;
+                delta.x += frameSpeed;
 
             cam->setPosition({pos.x + delta.x, pos.y + delta.y, pos.z + delta.z});
             cam->setTarget({target.x + delta.x, target.y + delta.y, target.z + delta.z});
         }
 
         screenManager->render(*sceneManager->getActiveScene());
-
         screenManager->present();
     }
 

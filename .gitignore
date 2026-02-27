@@ -4,6 +4,8 @@
 *.vxs
 *.spv
 *.glsl
+*.cso
+*.obj
 
 build/
 logs/

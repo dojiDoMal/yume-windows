@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "web",
+      "displayName": "Emscripten WebGL Build",
+      "description": "Build for WebGL using Emscripten",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/web",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+      }
+    },
+    {
+      "name": "native",
+      "displayName": "Native Build",
+      "binaryDir": "${sourceDir}/build/pc"
+    }
+  ]
+}
