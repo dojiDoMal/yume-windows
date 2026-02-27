@@ -136,8 +136,10 @@ void OpenGLRendererBackend::bindCamera(Camera* camera) {
     glm::mat4 model = glm::mat4(1.0f);
 
     auto& camPos = camera->getPosition();
-    glm::mat4 view = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    auto& camTarget = camera->getTarget();
+    glm::mat4 view =
+        glm::lookAt({camPos.x, camPos.y, camPos.z}, {camTarget.x, camTarget.y, camTarget.z},
+                    glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::mat4 projection;
     if (camera->isOrthographic()) {

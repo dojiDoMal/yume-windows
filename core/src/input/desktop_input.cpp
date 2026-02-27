@@ -24,7 +24,13 @@ void Yume::DesktopInput::requestQuit() {
   quit_requested = true; 
 }
 
-void Yume::DesktopInput::bindKey(KeyCode key, ActionCallback callback) {
-    
+void Yume::DesktopInput::bindKey(KeyCode key, ActionCallback callback) {   
     key_bindings[key] = callback;
+}
+
+bool Yume::DesktopInput::isKeyPressed(KeyCode key) {
+    if (!keyboard_state) {
+        keyboard_state = SDL_GetKeyboardState(nullptr);
+    }
+    return keyboard_state[SDL_GetScancodeFromKey(key)];
 }

@@ -50,7 +50,7 @@ void init() {
 
     sceneManager = std::make_unique<SceneManager>();
     sceneManager->setRendererBackend(*rendererBackend);
-    sceneManager->addScene("cena1", "scene_with_sprite.scnb");
+    //sceneManager->addScene("cena1", "scene_with_sprite.scnb");
     sceneManager->addScene("cena2", "scene.scnb");
     sceneManager->loadScene("cena2");
 
@@ -85,7 +85,7 @@ void main_loop() {
 #else
 void main_loop() {
 
-    float x = 0.0f, y = 0.0f, z = 0.0f;
+    float moveSpeed = 0.05f;
 
     bool running = true;
     while (running) {
@@ -96,11 +96,25 @@ void main_loop() {
             running = false;
         }
 
-        x += 0.001f;
-        y += 0.004f;
+        Camera* cam = sceneManager->getActiveScene()->getCamera();
+        if (cam) {
+            Vector3 pos = cam->getPosition();
+            Vector3 target = cam->getTarget();
+            Vector3 delta = {0, 0, 0};
 
-        (*sceneManager->getActiveScene()->getGameObjects())[0]->getTransform()->setPosition({sin(x),cos(y),z});
-        
+            if (engine.getInputSystem().isKeyPressed(SDLK_w))
+                delta.z -= moveSpeed;
+            if (engine.getInputSystem().isKeyPressed(SDLK_s))
+                delta.z += moveSpeed;
+            if (engine.getInputSystem().isKeyPressed(SDLK_a))
+                delta.x -= moveSpeed;
+            if (engine.getInputSystem().isKeyPressed(SDLK_d))
+                delta.x += moveSpeed;
+
+            cam->setPosition({pos.x + delta.x, pos.y + delta.y, pos.z + delta.z});
+            cam->setTarget({target.x + delta.x, target.y + delta.y, target.z + delta.z});
+        }
+
         screenManager->render(*sceneManager->getActiveScene());
 
         screenManager->present();

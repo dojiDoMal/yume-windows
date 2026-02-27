@@ -70,6 +70,10 @@ void compileLights(CompiledScene& scene, const json& j) {
         direction.y = lights[i]["direction"][1];
         direction.z = lights[i]["direction"][2];
         scene.lights[i].direction = direction;
+        scene.lights[i].intensity = lights[i]["intensity"];
+
+        for (int c = 0; c < 4; c++)
+            scene.lights[i].color[c] = lights[i]["color"][c];
     }
 }
 

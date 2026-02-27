@@ -9,6 +9,7 @@ class Camera {
   private:
     ColorRGBA backgroundColor = {0.2f, 0.3f, 0.3f, 1.0f};
     Vector3 position = {0.0f, 2.0f, 2.0f};
+    Vector3 target = {0.0f, 0.0f, 0.0f};
     std::unique_ptr<Skybox> skybox;
     float fov = 45.0f;
     float nearDistance = 0.1f;
@@ -24,6 +25,8 @@ class Camera {
 
     const Vector3& getPosition() const;
     void setPosition(const Vector3& position);
+    const Vector3& getTarget() const;
+    void setTarget(const Vector3& target);
     ColorRGBA& getBackgroundColor();
     void setBackgroundColor(const ColorRGBA& color);
     void setFov(float fov);

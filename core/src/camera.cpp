@@ -4,6 +4,10 @@ const Vector3& Camera::getPosition() const { return position; }
 
 void Camera::setPosition(const Vector3& position) { this->position = position; }
 
+const Vector3& Camera::getTarget() const { return target; }
+
+void Camera::setTarget(const Vector3& target) { this->target = target; }
+
 ColorRGBA& Camera::getBackgroundColor() { return backgroundColor; }
 
 void Camera::setBackgroundColor(const ColorRGBA& color) { this->backgroundColor = color; }

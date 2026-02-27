@@ -50,6 +50,13 @@ void Material::applyLight(const Light light) {
     }
 
     if (light.type == LightType::DIRECTIONAL) {
-        shaderProgram->setUniformBuffer("LightData", &light.direction, sizeof(light.direction));
+        struct LightDataBuffer {
+            Vector3 direction;
+            float padding;
+            ColorRGBA color;
+            float intensity;
+        } lightData = {light.direction, 0.0f, light.color, light.intensity};
+        
+        shaderProgram->setUniformBuffer("LightData", &lightData, sizeof(lightData));
     }
 }

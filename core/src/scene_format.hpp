@@ -8,6 +8,8 @@
 struct LightData {
     uint8_t type; // 0=DIRECTIONAL, 1=POINT, 2=SPOT
     Vector3 direction;
+    float color[4];
+    float intensity;
     // float position[3];
 };
 

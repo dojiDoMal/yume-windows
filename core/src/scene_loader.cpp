@@ -289,6 +289,9 @@ std::vector<Light>* SceneLoader::loadLights(const CompiledScene* scene) {
         Light light;
         light.type = static_cast<LightType>(scene->lights[i].type);
         light.direction = scene->lights[i].direction;
+        light.color = {scene->lights[i].color[0], scene->lights[i].color[1],
+                       scene->lights[i].color[2], scene->lights[i].color[3]};
+        light.intensity = scene->lights[i].intensity;
         lights->push_back(light);
     }
 
