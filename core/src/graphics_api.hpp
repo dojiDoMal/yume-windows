@@ -1,0 +1,6 @@
+#ifndef GRAPHICS_API_HPP
+#define GRAPHICS_API_HPP
+
+enum class GraphicsAPI { OPENGL, WEBGL, VULKAN, DIRECTX12 };
+
+#endif // GRAPHICS_API_HPP

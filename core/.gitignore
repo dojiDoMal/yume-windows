@@ -1,0 +1,6 @@
+build/
+.cache/
+*.scn
+*.scnb
+.vscode/
+vcpkg_installed/
