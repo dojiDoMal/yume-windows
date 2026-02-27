@@ -1,0 +1,11 @@
+*.scn
+*.scnb
+*.pxs
+*.vxs
+*.spv
+*.glsl
+
+build/
+logs/
+vcpkg_installed/
+.cache/
