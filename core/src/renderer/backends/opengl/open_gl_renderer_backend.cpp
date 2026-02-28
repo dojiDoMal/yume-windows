@@ -2,9 +2,9 @@
 #include "../../../log_macros.hpp"
 
 #include "../../../color.hpp"
-#include "../../../game_object.hpp"
+#include "../../../components/mesh_renderer.hpp"
+#include "../../../components/sprite_renderer.hpp"
 #include "../../../material.hpp"
-#include "../../../mesh_renderer.hpp"
 #include "../../../stb_image.h"
 #include "mesh_buffer_factory.hpp"
 #include "open_gl_renderer_backend.hpp"
@@ -133,20 +133,39 @@ void OpenGLRendererBackend::bindCamera(Camera* camera) {
         return;
     }
 
+    WorldObject* cameraObj = camera->getOwner();
+    if (!cameraObj) {
+        LOG_ERROR("Camera has no owner WorldObject");
+        return;
+    }
+
     glm::mat4 model = glm::mat4(1.0f);
 
-    auto& camPos = camera->getPosition();
-    auto& camTarget = camera->getTarget();
-    glm::mat4 view =
-        glm::lookAt({camPos.x, camPos.y, camPos.z}, {camTarget.x, camTarget.y, camTarget.z},
-                    glm::vec3(0.0f, 1.0f, 0.0f));
+    const auto camPos = cameraObj->getTransform().getPosition();
+    const auto camRot = cameraObj->getTransform().getRotation();
+
+    // Calcular forward vector da rotação (OpenGL usa Z negativo como forward)
+    glm::vec3 forward;
+    float yawRad = glm::radians(camRot.y);
+    float pitchRad = glm::radians(camRot.x);
+
+    forward.x = cos(pitchRad) * sin(yawRad);
+    forward.y = sin(pitchRad);
+    forward.z = cos(pitchRad) * cos(yawRad);
+    forward = glm::normalize(forward);
+
+    // Em OpenGL, forward padrão é -Z, então invertemos
+    forward = -forward;
+
+    glm::vec3 camPosVec(camPos.x, camPos.y, camPos.z);
+    glm::vec3 target = camPosVec + forward;
+
+    glm::mat4 view = glm::lookAt(camPosVec, target, glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::mat4 projection;
     if (camera->isOrthographic()) {
         float orthoSize = camera->getOrthoSize();
         float aspect = camera->getAspectRatio();
-        LOG_INFO("Ortho projection - size: " + std::to_string(orthoSize) +
-                 " aspect: " + std::to_string(aspect));
         projection = glm::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
                                 camera->getNearDistance(), camera->getFarDistance());
     } else {
@@ -181,41 +200,41 @@ void OpenGLRendererBackend::applyMaterial(Material* material) {
     setUniforms(program);
 }
 
-void OpenGLRendererBackend::renderGameObjects(std::vector<GameObject*>* gameObjects,
-                                              std::vector<Light>* lights) {
-    for (const auto go : *gameObjects) {
-
-        glm::mat4 model = glm::mat4(1.0f);
-        if (go->getTransform()) {
-            model = go->getTransform()->getModelMatrix();
-        }
+void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
+                                               const std::vector<Light*>& lights) {
+    for (auto* obj : objects) { // Remover const
+        glm::mat4 model = obj->getTransform().getModelMatrix();
 
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        if (go->hasSprite() && go->hasSpriteRenderer()) {
-            auto sprite = go->getSprite();
-            auto spriteRenderer = go->getSpriteRenderer();
-            auto mat = spriteRenderer->getMaterial();
+        if (obj->hasSprite()) {
+            auto sprite = obj->getSprite();
+            auto spriteRenderer = obj->getComponent<SpriteRenderer>();
 
-            if (mat) {
-                mat->use();
-                applyMaterial(mat);
-                drawSprite(*sprite);
-            }
-        } else if (go->hasMesh() && go->hasMeshRenderer()) {
-            auto mesh = go->getMesh();
-            auto meshRenderer = go->getMeshRenderer();
-            auto mat = meshRenderer->getMaterial();
-
-            if (mat) {
-                mat->use();
-                applyMaterial(mat);
-                if (lights && !lights->empty()) {
-                    mat->applyLight((*lights)[0]);
+            if (spriteRenderer) {
+                auto mat = spriteRenderer->getMaterial();
+                if (mat) {
+                    mat->use();
+                    applyMaterial(mat);
+                    drawSprite(*sprite);
                 }
-                draw(*mesh);
+            }
+        } else if (obj->hasMesh()) {
+            auto mesh = obj->getMesh();
+            auto meshRenderer = obj->getComponent<MeshRenderer>();
+
+            if (meshRenderer) {
+                auto mat = meshRenderer->getMaterial();
+                if (mat) {
+                    mat->use();
+                    applyMaterial(mat);
+                    if (!lights.empty()) {
+                        mat->applyLight(*lights[0]);
+                    }
+                    draw(*mesh);
+                }
             }
         }
     }
@@ -260,9 +279,13 @@ void OpenGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
     if (!mainCamera)
         return;
 
+    WorldObject* cameraObj = mainCamera->getOwner();
+    if (!cameraObj)
+        return;
+
     glDepthFunc(GL_LEQUAL);
 
-    auto& camPos = mainCamera->getPosition();
+    const auto camPos = cameraObj->getTransform().getPosition(); // Mudar auto& para const auto
     glm::mat4 camView = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, 1.0f, 0.0f));
 

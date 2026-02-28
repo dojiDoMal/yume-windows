@@ -1,24 +1,28 @@
 #ifndef SCENE_LOADER_HPP
 #define SCENE_LOADER_HPP
 
-#include "camera.hpp"
-#include "game_object.hpp"
-#include "light.hpp"
+#include "components/camera.hpp"
+#include "components/light.hpp"
+#include "components/mesh_renderer.hpp"
+#include "components/sprite_renderer.hpp"
 #include "mesh.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene_format.hpp"
+#include "world_object.hpp"
+#include "world_object_manager.hpp"
 #include <memory>
 #include <string>
-#include <vector>
+
 
 class SceneLoader {
   private:
     RendererBackend* rendererBackend = nullptr;
 
     std::unique_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
-    void loadTransformComponent(GameObject* gameObject, const ComponentData& comp);
-    void loadMeshRendererComponent(GameObject* gameObject, const ComponentData& comp);
-    void loadSpriteRendererComponent(GameObject* gameObject, const ComponentData& comp);
+    void loadMeshRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadCameraComponent(WorldObject* obj, const ComponentData& comp); // ADICIONAR
+    void loadLightComponent(WorldObject* obj, const ComponentData& comp);  // ADICIONAR
 
   public:
     SceneLoader();
@@ -26,9 +30,7 @@ class SceneLoader {
     bool validateSceneFile(const std::string& filepath);
     CompiledScene* loadCompiledScene(const std::string& filepath);
 
-    Camera* loadCamera(const CompiledScene* scene);
-    std::vector<GameObject*>* loadGameObjects(const CompiledScene* scene);
-    std::vector<Light>* loadLights(const CompiledScene* scene);
+    void loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene);
 };
 
 #endif

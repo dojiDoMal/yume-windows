@@ -1,6 +1,7 @@
 #define CLASS_NAME "D3D12RendererBackend"
 #include "../../../log_macros.hpp"
 
+#include "../../../components/mesh_renderer.hpp"
 #include "../../../mesh_buffer_factory.hpp"
 #include "../../../shader_compiler_factory.hpp"
 #include "../../../shader_program_factory.hpp"
@@ -253,14 +254,13 @@ bool D3D12RendererBackend::createConstantBuffers() {
             return false;
         constantBuffers[i]->Map(0, nullptr, &constantBufferData[i]);
     }
-    
+
     uniformBindings["ModelViewProjection"] = 0;
     uniformBindings["MaterialData"] = 1;
     uniformBindings["LightData"] = 2;
-    
+
     return true;
 }
-
 
 void D3D12RendererBackend::waitForGPU() {
     commandQueue->Signal(fence, ++fenceValue);
@@ -336,24 +336,51 @@ void D3D12RendererBackend::setUniforms(ShaderProgram* shaderProgram) {
     auto mvpAddr = program->getConstantBufferAddress("ModelViewProjection");
     auto matAddr = program->getConstantBufferAddress("MaterialData");
     auto lightAddr = program->getConstantBufferAddress("LightData");
-    
-    if (mvpAddr) commandList->SetGraphicsRootConstantBufferView(0, mvpAddr);
-    else commandList->SetGraphicsRootConstantBufferView(0, constantBuffers[0]->GetGPUVirtualAddress());
-    
-    if (matAddr) commandList->SetGraphicsRootConstantBufferView(1, matAddr);
-    else commandList->SetGraphicsRootConstantBufferView(1, constantBuffers[1]->GetGPUVirtualAddress());
-    
-    if (lightAddr) commandList->SetGraphicsRootConstantBufferView(2, lightAddr);
-    else commandList->SetGraphicsRootConstantBufferView(2, constantBuffers[2]->GetGPUVirtualAddress());
+
+    if (mvpAddr)
+        commandList->SetGraphicsRootConstantBufferView(0, mvpAddr);
+    else
+        commandList->SetGraphicsRootConstantBufferView(0,
+                                                       constantBuffers[0]->GetGPUVirtualAddress());
+
+    if (matAddr)
+        commandList->SetGraphicsRootConstantBufferView(1, matAddr);
+    else
+        commandList->SetGraphicsRootConstantBufferView(1,
+                                                       constantBuffers[1]->GetGPUVirtualAddress());
+
+    if (lightAddr)
+        commandList->SetGraphicsRootConstantBufferView(2, lightAddr);
+    else
+        commandList->SetGraphicsRootConstantBufferView(2,
+                                                       constantBuffers[2]->GetGPUVirtualAddress());
 }
 
 void D3D12RendererBackend::bindCamera(Camera* camera) {
-    glm::mat4 model =
-        glm::rotate(glm::mat4(1.0f), SDL_GetTicks() / 1000.0f, glm::vec3(0.5f, 1.0f, 0.0f));
+    if (!camera)
+        return;
 
-    auto& camPos = camera->getPosition();
-    glm::mat4 view = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    WorldObject* cameraObj = camera->getOwner();
+    if (!cameraObj)
+        return;
+
+    glm::mat4 model = glm::mat4(1.0f);
+
+    // Usar const auto em vez de auto& (retorna por valor)
+    const auto camPos = cameraObj->getTransform().getPosition();
+    const auto camRot = cameraObj->getTransform().getRotation();
+
+    // Calcular forward vector da rotação
+    glm::vec3 forward;
+    forward.x = cos(glm::radians(camRot.y)) * cos(glm::radians(camRot.x));
+    forward.y = sin(glm::radians(camRot.x));
+    forward.z = sin(glm::radians(camRot.y)) * cos(glm::radians(camRot.x));
+    forward = glm::normalize(forward);
+
+    glm::vec3 target = glm::vec3(camPos.x, camPos.y, camPos.z) + forward;
+
+    glm::mat4 view =
+        glm::lookAt({camPos.x, camPos.y, camPos.z}, target, glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::mat4 projection =
         glm::perspective(glm::radians(camera->getFov()), camera->getAspectRatio(),
@@ -375,7 +402,6 @@ void D3D12RendererBackend::setBufferDataImpl(const std::string& name, const void
         updateConstantBuffer(it->second, data, size);
     }
 }
-
 
 void D3D12RendererBackend::updateConstantBuffer(int binding, const void* data, size_t size) {
     if (binding >= 0 && binding < 3 && constantBufferData[binding]) {
@@ -416,38 +442,34 @@ void D3D12RendererBackend::applyMaterial(Material* material) {
     setUniforms(program);
 }
 
-void D3D12RendererBackend::renderGameObjects(std::vector<GameObject*>* gameObjects,
-                                             std::vector<Light>* lights = nullptr) {
-    for (const auto go : *gameObjects) {
-        auto mesh = go->getMesh();
-        if (!mesh) {
-            LOG_INFO("Mesh is null!");
-            return;
-        }
+void D3D12RendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
+                                              const std::vector<Light*>& lights) {
+    for (auto* obj : objects) { // Remover const
+        auto mesh = obj->getMesh();
+        if (!mesh)
+            continue;
 
-        auto meshRenderer = go->getMeshRenderer();
-        if (!meshRenderer) {
-            LOG_INFO("MeshRenderer is null!");
-            return;
-        }
+        auto meshRenderer = obj->getComponent<MeshRenderer>();
+        if (!meshRenderer)
+            continue;
 
-        auto mat = meshRenderer->getMaterial();
-        if (!mat) {
-            LOG_INFO("Material is null!");
-            return;
-        }
+        auto mat = meshRenderer->getMaterial(); // Agora retorna Material* não-const
+        if (!mat)
+            continue;
 
         mat->use();
         applyMaterial(mat);
 
-        if (lights && !lights->empty()) {
-            mat->applyLight((*lights)[0]);
+        if (!lights.empty()) {
+            mat->applyLight(*lights[0]);
         }
 
         draw(*mesh);
     }
 }
 
-unsigned int D3D12RendererBackend::loadTexture(const std::string& path, uint8_t filterType) { return 0; };
-    
+unsigned int D3D12RendererBackend::loadTexture(const std::string& path, uint8_t filterType) {
+    return 0;
+};
+
 void D3D12RendererBackend::drawSprite(const Sprite& sprite) {};

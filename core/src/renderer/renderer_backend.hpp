@@ -1,22 +1,23 @@
 #ifndef RENDERER_BACKEND_HPP
 #define RENDERER_BACKEND_HPP
 
-#include "../camera.hpp"
-#include "../game_object.hpp"
+#include "../components/camera.hpp"
+#include "../components/light.hpp"
 #include "../graphics_api.hpp"
-#include "../light.hpp"
 #include "../mesh.hpp"
 #include "../shader_program.hpp"
 #include "../sprite.hpp"
+#include "../world_object.hpp"
 #include <memory>
 #include <vector>
+
 
 struct SDL_Window;
 
 class RendererBackend {
   protected:
     Camera* mainCamera = nullptr;
-    std::vector<Light> lights;
+    std::vector<Light*> lights;
 
   public:
     virtual ~RendererBackend() = default;
@@ -40,14 +41,15 @@ class RendererBackend {
     virtual void onCameraSet() = 0;
     virtual void setUniforms(ShaderProgram* shaderProgram) = 0;
     virtual unsigned int getRequiredWindowFlags() const = 0;
-    
-    virtual void renderGameObjects(std::vector<GameObject*>* gameObjects,
-                                   std::vector<Light>* lights) = 0;
+
+    virtual void renderWorldObjects(const std::vector<WorldObject*>& objects,
+                                    const std::vector<Light*>& lights) = 0;
 
     virtual void renderSkybox(const Mesh& mesh, unsigned int shaderProgram,
                               unsigned int textureID) = 0;
 
     virtual void setBufferDataImpl(const std::string& name, const void* data, size_t size) = 0;
+
     template <typename T> void setBufferData(const std::string& name, const T* data) {
         setBufferDataImpl(name, static_cast<const void*>(data), sizeof(T));
     }
@@ -59,8 +61,8 @@ class RendererBackend {
         onCameraSet();
     }
 
-    void setLights(const std::vector<Light>& sceneLights) { lights = sceneLights; }
-    const std::vector<Light>& getLights() const { return lights; }
+    void setLights(const std::vector<Light*>& sceneLights) { lights = sceneLights; }
+    const std::vector<Light*>& getLights() const { return lights; }
 };
 
-#endif // RENDERERBACKEND_HPP
+#endif

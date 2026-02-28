@@ -6,11 +6,12 @@
 #include "scene_manager.hpp"
 #include "stb_image_header.hpp"
 
-#include "game_object_manager.hpp"
+#include "logger.hpp"
+#include "timer.hpp"
 #include "vector3.hpp"
 #include "window/window_desc.hpp"
 #include "window/window_manager.hpp"
-#include "logger.hpp"
+#include "world_object_manager.hpp"
 #include <SDL2/SDL_keycode.h>
 
 #include <cmath>
@@ -22,12 +23,10 @@
 #ifdef PLATFORM_WEBGL
 GraphicsAPI graphicsAPI = GraphicsAPI::WEBGL;
 #else
-// Escolha a API aqui: GraphicsAPI::OPENGL ou GraphicsAPI::VULKAN
+// ou GraphicsAPI::VULKAN
 GraphicsAPI graphicsAPI = GraphicsAPI::OPENGL;
 #endif
 
-Scene scene;
-GameObjectManager gameObjects;
 std::unique_ptr<WindowManager> screenManager;
 std::unique_ptr<SceneManager> sceneManager;
 RendererBackend* rendererBackend = nullptr;
@@ -37,11 +36,11 @@ auto inputMan = Yume::IInputFactory::create();
 Yume::Context engine(inputMan);
 
 void init() {
-    
+
     winDesc.title = "Engine";
     winDesc.width = 800;
     winDesc.height = 600;
-    
+
     screenManager = std::make_unique<WindowManager>();
     screenManager->setGraphicsApi(graphicsAPI);
     screenManager->init(winDesc);
@@ -50,24 +49,18 @@ void init() {
 
     sceneManager = std::make_unique<SceneManager>();
     sceneManager->setRendererBackend(*rendererBackend);
-    //sceneManager->addScene("cena1", "scene_with_sprite.scnb");
+    // sceneManager->addScene("cena1", "scene_with_sprite.scnb");
     sceneManager->addScene("cena2", "scene.scnb");
     sceneManager->loadScene("cena2");
 
-    engine.getInputSystem().bindKey(SDLK_ESCAPE, [&]() { 
-        engine.getInputSystem().requestQuit(); 
-    });
+    engine.getInputSystem().bindKey(SDLK_ESCAPE, [&]() { engine.getInputSystem().requestQuit(); });
 
-    engine.getInputSystem().bindKey(SDLK_SPACE, [&]() { 
-        sceneManager->loadScene("cena2");
-    });
+    engine.getInputSystem().bindKey(SDLK_SPACE, [&]() { sceneManager->loadScene("cena2"); });
 }
 
 #ifdef PLATFORM_WEBGL
 #include <emscripten.h>
-#endif
 
-#ifdef PLATFORM_WEBGL
 void main_loop() {
 
     SDL_Event event;
@@ -83,17 +76,16 @@ void main_loop() {
     SDL_GL_SwapWindow(screenManager->getWindow());
 }
 #else
+
 void main_loop() {
-    static Uint64 lastTime = SDL_GetPerformanceCounter();
-    static float deltaTime = 0.0f;
+    static Timer timer;
 
     float moveSpeed = 2.0f;
 
     bool running = true;
     while (running) {
-        Uint64 currentTime = SDL_GetPerformanceCounter();
-        deltaTime = (float)(currentTime - lastTime) / SDL_GetPerformanceFrequency();
-        lastTime = currentTime;
+        timer.tick();
+        float deltaTime = timer.getDeltaTime();
 
         engine.getInputSystem().processEvents();
 
@@ -101,25 +93,58 @@ void main_loop() {
             running = false;
         }
 
-        Camera* cam = sceneManager->getActiveScene()->getCamera();
-        if (cam) {
-            Vector3 pos = cam->getPosition();
-            Vector3 target = cam->getTarget();
-            Vector3 delta = {0, 0, 0};
+        WorldObject* cameraObj = sceneManager->getActiveScene()->getCameraObject();
+        if (cameraObj) {
+            Transform& transform = cameraObj->getTransform();
+            Vector3 pos = transform.getPosition();
+            Vector3 rot = transform.getRotation();
 
             float frameSpeed = moveSpeed * deltaTime;
 
-            if (engine.getInputSystem().isKeyPressed(SDLK_w))
-                delta.z -= frameSpeed;
-            if (engine.getInputSystem().isKeyPressed(SDLK_s))
-                delta.z += frameSpeed;
-            if (engine.getInputSystem().isKeyPressed(SDLK_a))
-                delta.x -= frameSpeed;
-            if (engine.getInputSystem().isKeyPressed(SDLK_d))
-                delta.x += frameSpeed;
+            // Calcular forward e right vectors da rotação (igual ao bindCamera)
+            float yawRad = glm::radians(rot.y);
+            float pitchRad = glm::radians(rot.x);
 
-            cam->setPosition({pos.x + delta.x, pos.y + delta.y, pos.z + delta.z});
-            cam->setTarget({target.x + delta.x, target.y + delta.y, target.z + delta.z});
+            Vector3 forward;
+            forward.x = cos(pitchRad) * sin(yawRad);
+            forward.y = sin(pitchRad);
+            forward.z = cos(pitchRad) * cos(yawRad);
+
+            // Normalizar
+            float length =
+                sqrt(forward.x * forward.x + forward.y * forward.y + forward.z * forward.z);
+            forward.x /= length;
+            forward.y /= length;
+            forward.z /= length;
+
+            // Inverter (OpenGL usa -Z como forward)
+            forward.x = -forward.x;
+            forward.y = -forward.y;
+            forward.z = -forward.z;
+
+            Vector3 right = {cos(yawRad), 0.0f, -sin(yawRad)};
+
+            // Movimento WASD
+            Vector3 delta = {0, 0, 0};
+            if (engine.getInputSystem().isKeyPressed(SDLK_w)) {
+                delta.x += forward.x * frameSpeed;
+                delta.z += forward.z * frameSpeed;
+            }
+            if (engine.getInputSystem().isKeyPressed(SDLK_s)) {
+                delta.x -= forward.x * frameSpeed;
+                delta.z -= forward.z * frameSpeed;
+            }
+            if (engine.getInputSystem().isKeyPressed(SDLK_a)) {
+                delta.x -= right.x * frameSpeed;
+                delta.z -= right.z * frameSpeed;
+            }
+            if (engine.getInputSystem().isKeyPressed(SDLK_d)) {
+                delta.x += right.x * frameSpeed;
+                delta.z += right.z * frameSpeed;
+            }
+
+            transform.setPosition({pos.x + delta.x, pos.y + delta.y, pos.z + delta.z});
+            transform.setRotation(rot);
         }
 
         screenManager->render(*sceneManager->getActiveScene());
@@ -132,16 +157,16 @@ void main_loop() {
 #endif
 
 int main(int argc, char* argv[]) {
-        Logger::init("engine");
+    Logger::init("engine");
 
-        init();
+    init();
 
 #ifdef PLATFORM_WEBGL
-        emscripten_set_main_loop(main_loop, 0, 1);
+    emscripten_set_main_loop(main_loop, 0, 1);
 #else
-        main_loop();
+    main_loop();
 #endif
 
-        Logger::shutdown();
-        return 0;
+    Logger::shutdown();
+    return 0;
 }

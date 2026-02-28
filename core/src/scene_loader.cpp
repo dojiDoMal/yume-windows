@@ -4,8 +4,11 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tinyobjloader/tiny_obj_loader.h"
 
+#include "components/camera.hpp"
+#include "components/light.hpp"
+#include "components/mesh_renderer.hpp"
+#include "components/sprite_renderer.hpp"
 #include "material.hpp"
-#include "mesh_renderer.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene_format.hpp"
 #include "scene_loader.hpp"
@@ -30,20 +33,11 @@ CompiledScene* SceneLoader::loadCompiledScene(const std::string& filepath) {
         return nullptr;
     }
 
-    LOG_INFO("Loaded scene with " + std::to_string(scene->gameObjectCount) + " game objects");
-
+    LOG_INFO("Loaded scene with " + std::to_string(scene->worldObjectCount) + " world objects");
     return scene;
 }
 
-void SceneLoader::loadTransformComponent(GameObject* gameObject, const ComponentData& comp) {
-    auto transform = std::make_unique<Transform>();
-    transform->setPosition(comp.transform.position);
-    transform->setRotation(comp.transform.rotation);
-    transform->setScale(comp.transform.scale);
-    gameObject->setTransform(std::move(transform));
-}
-
-void SceneLoader::loadMeshRendererComponent(GameObject* gameObject, const ComponentData& comp) {
+void SceneLoader::loadMeshRendererComponent(WorldObject* obj, const ComponentData& comp) {
     auto& meshData = comp.meshRenderer.mesh;
     auto& materialData = comp.meshRenderer.material;
 
@@ -78,11 +72,11 @@ void SceneLoader::loadMeshRendererComponent(GameObject* gameObject, const Compon
     auto meshRenderer = std::make_unique<MeshRenderer>();
     meshRenderer->setMaterial(std::move(material));
 
-    gameObject->setMesh(std::move(mesh));
-    gameObject->setMeshRenderer(std::move(meshRenderer));
+    obj->setMesh(std::move(mesh));
+    obj->addComponent(std::move(meshRenderer));
 }
 
-void SceneLoader::loadSpriteRendererComponent(GameObject* gameObject, const ComponentData& comp) {
+void SceneLoader::loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp) {
     auto& textureData = comp.spriteRenderer.texture;
     auto& materialData = comp.spriteRenderer.material;
 
@@ -116,8 +110,65 @@ void SceneLoader::loadSpriteRendererComponent(GameObject* gameObject, const Comp
     auto spriteRenderer = std::make_unique<SpriteRenderer>();
     spriteRenderer->setMaterial(std::move(material));
 
-    gameObject->setSprite(std::move(sprite));
-    gameObject->setSpriteRenderer(std::move(spriteRenderer));
+    obj->setSprite(std::move(sprite));
+    obj->addComponent(std::move(spriteRenderer));
+}
+
+void SceneLoader::loadCameraComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& camData = comp.camera;
+
+    auto camera = std::make_unique<Camera>();
+    camera->setBackgroundColor(ColorRGBA{camData.background_color[0], camData.background_color[1],
+                                         camData.background_color[2], camData.background_color[3]});
+    camera->setFov(camData.fov);
+    camera->setViewRect(camData.view_rect[0], camData.view_rect[1]);
+    camera->setOrthographic(camData.orthographic);
+    camera->setOrthoSize(camData.orthoSize);
+
+    if (camData.hasSkybox) {
+        auto skybox = std::make_unique<Skybox>();
+
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto skyboxVertexShaderPtr = std::make_unique<ShaderAsset>(
+            camData.skybox.material.vertexShaderPath + shaderExt, ShaderType::VERTEX);
+        skyboxVertexShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto skyboxFragmentShaderPtr = std::make_unique<ShaderAsset>(
+            camData.skybox.material.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
+        skyboxFragmentShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto skyboxMaterial = std::make_unique<Material>();
+        skyboxMaterial->setShaderProgram(rendererBackend->createShaderProgram());
+        skyboxMaterial->setVertexShader(std::move(skyboxVertexShaderPtr));
+        skyboxMaterial->setFragmentShader(std::move(skyboxFragmentShaderPtr));
+        skyboxMaterial->init();
+
+        std::vector<std::string> faces;
+        for (const auto& row : camData.skybox.cubeMapTextures) {
+            faces.push_back(row);
+        }
+
+        unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
+        skybox->setTextureID(cubemapID);
+        skybox->setMaterial(std::move(skyboxMaterial));
+        skybox->init();
+        camera->setSkybox(std::move(skybox));
+    }
+
+    obj->addComponent(std::move(camera));
+}
+
+void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& lightData = comp.light;
+
+    auto light = std::make_unique<Light>();
+    light->setType(static_cast<LightType>(lightData.lightType));
+    light->setDirection(lightData.direction);
+    light->setColor(
+        ColorRGBA{lightData.color[0], lightData.color[1], lightData.color[2], lightData.color[3]});
+    light->setIntensity(lightData.intensity);
+
+    obj->addComponent(std::move(light));
 }
 
 std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
@@ -135,7 +186,6 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
     std::vector<float> normals;
 
     if (shadeSmooth && !attrib.normals.empty()) {
-        // Usar normais do arquivo (smooth)
         for (const auto& shape : shapes) {
             for (const auto& index : shape.mesh.indices) {
                 vertices.push_back(attrib.vertices[3 * index.vertex_index + 0]);
@@ -150,10 +200,8 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
             }
         }
     } else {
-        // Calcular normais flat (por face)
         for (const auto& shape : shapes) {
             for (size_t f = 0; f < shape.mesh.indices.size(); f += 3) {
-                // Pegar 3 vértices do triângulo
                 auto& i0 = shape.mesh.indices[f + 0];
                 auto& i1 = shape.mesh.indices[f + 1];
                 auto& i2 = shape.mesh.indices[f + 2];
@@ -168,14 +216,12 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
                                attrib.vertices[3 * i2.vertex_index + 1],
                                attrib.vertices[3 * i2.vertex_index + 2]};
 
-                // Calcular normal da face
                 float edge1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
                 float edge2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
                 float normal[3] = {edge1[1] * edge2[2] - edge1[2] * edge2[1],
                                    edge1[2] * edge2[0] - edge1[0] * edge2[2],
                                    edge1[0] * edge2[1] - edge1[1] * edge2[0]};
 
-                // Normalizar
                 float len =
                     sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
                 if (len > 0) {
@@ -184,7 +230,6 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
                     normal[2] /= len;
                 }
 
-                // Adicionar vértices e mesma normal para os 3 vértices
                 for (int i = 0; i < 3; i++) {
                     auto& idx = shape.mesh.indices[f + i];
                     vertices.push_back(attrib.vertices[3 * idx.vertex_index + 0]);
@@ -204,98 +249,48 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
     return mesh;
 }
 
-Camera* SceneLoader::loadCamera(const CompiledScene* scene) {
+void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene) {
+    LOG_INFO("Loading " + std::to_string(scene->worldObjectCount) + " world objects");
 
-    auto camera = new Camera();
-    auto& cam = scene->camera;
+    for (uint32_t i = 0; i < scene->worldObjectCount; i++) {
+        auto& woData = scene->worldObjects[i];
+        auto* obj = manager->createObject();
 
-    camera->setBackgroundColor({cam.background_color[0], cam.background_color[1],
-                                cam.background_color[2], cam.background_color[3]});
-    camera->setFov(cam.fov);
-    camera->setViewRect(cam.view_rect[0], cam.view_rect[1]);
-    camera->setPosition({(float)cam.position[0], (float)cam.position[1], (float)cam.position[2]});
-    
-    camera->setOrthographic(cam.orthographic);
-    camera->setOrthoSize(cam.orthoSize);
-    LOG_INFO("Camera orthoSize loaded: " + std::to_string(cam.orthoSize));
+        // Carregar transform
+        obj->getTransform().setPosition(woData.position);
+        obj->getTransform().setRotation(woData.rotation);
+        obj->getTransform().setScale(woData.scale);
 
-    if (cam.hasSkybox) {
-        auto skybox = std::make_unique<Skybox>();
+        LOG_INFO("WorldObject #" + std::to_string(i) + " - Pos: (" +
+                 std::to_string(woData.position.x) + ", " + std::to_string(woData.position.y) +
+                 ", " + std::to_string(woData.position.z) + ")");
 
-        auto shaderExt = rendererBackend->getShaderExtension();
-        auto skyboxVertexShaderPtr = std::make_unique<ShaderAsset>(
-            cam.skybox.material.vertexShaderPath + shaderExt, ShaderType::VERTEX);
-        skyboxVertexShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+        // Carregar componentes
+        for (uint8_t j = 0; j < woData.componentCount; j++) {
+            auto& comp = woData.components[j];
 
-        auto skyboxFragmentShaderPtr = std::make_unique<ShaderAsset>(
-            cam.skybox.material.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
-        skyboxFragmentShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
-
-        auto skyboxMaterial = std::make_unique<Material>();
-        skyboxMaterial->setShaderProgram(rendererBackend->createShaderProgram());
-        skyboxMaterial->setVertexShader(std::move(skyboxVertexShaderPtr));
-        skyboxMaterial->setFragmentShader(std::move(skyboxFragmentShaderPtr));
-        skyboxMaterial->init();
-
-        std::vector<std::string> faces;
-        for (const auto row : cam.skybox.cubeMapTextures) {
-            faces.push_back(row);
-        }
-
-        unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
-        skybox->setTextureID(cubemapID);
-        skybox->setMaterial(std::move(skyboxMaterial));
-        skybox->init();
-        camera->setSkybox(std::move(skybox));
-    }
-
-    return camera;
-}
-
-std::vector<GameObject*>* SceneLoader::loadGameObjects(const CompiledScene* scene) {
-
-    auto objects = new std::vector<GameObject*>();
-
-    LOG_INFO("Loading " + std::to_string(scene->gameObjectCount) + " game objects");
-
-    for (uint32_t i = 0; i < scene->gameObjectCount; i++) {
-        auto& goData = scene->gameObjects[i];
-        auto gameObject = new GameObject();
-
-        for (uint8_t j = 0; j < goData.componentCount; j++) {
-            auto& comp = goData.components[j];
-
-            if (comp.type == ComponentType::MESH_RENDERER) {
-                LOG_INFO("Loading mesh renderer component");
-                loadMeshRendererComponent(gameObject, comp);
-            } else if (comp.type == ComponentType::TRANSFORM) {
-                loadTransformComponent(gameObject, comp);
-            } else if (comp.type == ComponentType::SPRITE_RENDERER) {
-                loadSpriteRendererComponent(gameObject, comp);
+            switch (comp.type) {
+            case ComponentType::MESH_RENDERER:
+                LOG_INFO("  - Loading MESH_RENDERER component");
+                loadMeshRendererComponent(obj, comp);
+                break;
+            case ComponentType::SPRITE_RENDERER:
+                LOG_INFO("  - Loading SPRITE_RENDERER component");
+                loadSpriteRendererComponent(obj, comp);
+                break;
+            case ComponentType::CAMERA:
+                LOG_INFO("  - Loading CAMERA component");
+                loadCameraComponent(obj, comp);
+                break;
+            case ComponentType::LIGHT:
+                LOG_INFO("  - Loading LIGHT component");
+                loadLightComponent(obj, comp);
+                break;
+            default:
+                break;
             }
         }
-
-        objects->push_back(gameObject);
     }
-
-    return objects;
-}
-
-std::vector<Light>* SceneLoader::loadLights(const CompiledScene* scene) {
-
-    auto lights = new std::vector<Light>();
-
-    for (uint32_t i = 0; i < scene->lightCount; i++) {
-        Light light;
-        light.type = static_cast<LightType>(scene->lights[i].type);
-        light.direction = scene->lights[i].direction;
-        light.color = {scene->lights[i].color[0], scene->lights[i].color[1],
-                       scene->lights[i].color[2], scene->lights[i].color[3]};
-        light.intensity = scene->lights[i].intensity;
-        lights->push_back(light);
-    }
-
-    return lights;
 }
 
 bool SceneLoader::validateSceneFile(const std::string& filepath) {

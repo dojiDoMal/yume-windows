@@ -3,12 +3,12 @@
 
 #include "../../../graphics_api.hpp"
 #include "../../../mesh.hpp"
+#include "../../../world_object.hpp"
 #include "../../renderer_backend.hpp"
 #include <GL/glew.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
 
 class OpenGLRendererBackend : public RendererBackend {
   private:
@@ -30,7 +30,7 @@ class OpenGLRendererBackend : public RendererBackend {
     void present(SDL_Window* window) override;
     bool initWindowContext() override;
     void bindCamera(Camera* camera) override;
-    void applyMaterial(Material* material) override;    
+    void applyMaterial(Material* material) override;
     void setBufferDataImpl(const std::string& name, const void* data, size_t size) override;
     void clear(Camera* camera) override;
     void draw(const Mesh&) override;
@@ -43,10 +43,9 @@ class OpenGLRendererBackend : public RendererBackend {
     GraphicsAPI getGraphicsAPI() const override;
     std::string getShaderExtension() const override;
 
-    void renderGameObjects(std::vector<GameObject*>* gameObjects,
-                           std::vector<Light>* lights) override;
+    void renderWorldObjects(const std::vector<WorldObject*>& objects,
+                            const std::vector<Light*>& lights) override;
 
-    // Skybox management
     void deleteCubemapTexture(unsigned int textureID);
     void renderSkybox(const Mesh& mesh, unsigned int shaderProgram,
                       unsigned int textureID) override;
@@ -55,4 +54,4 @@ class OpenGLRendererBackend : public RendererBackend {
     bool init(SDL_Window* window) override;
 };
 
-#endif // OPENGLRENDERERBACKEND_HPP
+#endif

@@ -1,10 +1,11 @@
 #ifndef MESH_RENDERER_HPP
 #define MESH_RENDERER_HPP
 
-#include "material.hpp"
+#include "../material.hpp"
+#include "component.hpp"
 #include <memory>
 
-class MeshRenderer {
+class MeshRenderer : public Component {
   private:
     std::unique_ptr<Material> material;
 

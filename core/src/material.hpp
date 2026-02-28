@@ -2,7 +2,7 @@
 #define MATERIAL_HPP
 
 #include "color.hpp"
-#include "light.hpp"
+#include "components/light.hpp"
 #include "shader_asset.hpp"
 #include "shader_program.hpp"
 #include <memory>
@@ -20,7 +20,7 @@ class Material {
     bool init();
     void use();
     void setBaseColor(const ColorRGBA color);
-    void applyLight(const Light light);
+    void applyLight(const Light& light);
 
     void setVertexShader(std::unique_ptr<ShaderAsset> shader) { vertexShader = std::move(shader); }
 

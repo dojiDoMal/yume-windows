@@ -1,13 +1,10 @@
 #define CLASS_NAME "Renderer"
 #include "../log_macros.hpp"
 
-#include "../game_object.hpp"
-#include "../material.hpp"
-#include "../log_macros.hpp"
-#include "renderer_factory.hpp"
+#include "../world_object.hpp"
 #include "renderer.hpp"
-#include <cstdint>
-#include <cstdio>
+#include "renderer_factory.hpp"
+
 
 Renderer::~Renderer() {
     if (backend) {
@@ -25,7 +22,6 @@ bool Renderer::initBackend(const GraphicsAPI& graphicsApi) {
         LOG_ERROR("Unsupported graphics API!");
         return false;
     }
-
     return true;
 }
 
@@ -33,67 +29,48 @@ bool Renderer::initWindow(SDL_Window* win) {
     if (backend) {
         return backend->init(win);
     }
-
     return false;
 }
 
 void Renderer::render(const Scene& scene) {
-
     if (!backend) {
         LOG_ERROR("Can not render without a renderer backend!");
         return;
     }
 
-    if (!scene.getCamera()) {
+    Camera* camera = scene.getCamera();
+    if (!camera) {
         LOG_WARN("Scene doesn't have a main camera to render!");
         return;
     }
 
-    // Order is important here
+    // Bind camera
+    backend->bindCamera(camera);
 
-    backend->bindCamera(scene.getCamera());
+    // Clear screen
+    backend->clear(camera);
 
-    backend->clear(scene.getCamera());
+    // Collect lights
+    std::vector<Light*> lights;
+    for (auto* obj : scene.getLightObjects()) {
+        if (Light* light = obj->getComponent<Light>()) {
+            lights.push_back(light);
+        }
+    }
 
-    backend->renderGameObjects(const_cast<std::vector<GameObject*>*>(scene.getGameObjects()),
-                               const_cast<std::vector<Light>*>(scene.getLights()));
+    // Render objects
+    std::vector<WorldObject*> renderableObjects;
+    for (auto& obj : scene.getObjectManager()->getObjects()) {
+        if (obj->hasMesh() || obj->hasSprite()) {
+            renderableObjects.push_back(obj.get());
+        }
+    }
+
+    backend->renderWorldObjects(renderableObjects, lights);
 }
 
 void Renderer::present(SDL_Window* window) {
     if (backend) {
         backend->present(window);
-    }
-}
-
-//deprecated
-void Renderer::render(const std::vector<GameObject*>* objects) {
-
-    if (backend && backend->getCamera()) {
-        auto skybox = backend->getCamera()->getSkybox();
-        if (skybox) {
-            printf("Skybox exists\n");
-            if (skybox->getMaterial()) {
-                printf("Skybox material exists\n");
-                skybox->getMaterial()->use();
-                auto program = skybox->getMaterial()->getShaderProgram();
-                if (program) {
-                    printf("Skybox program exists\n");
-                    unsigned int shaderProgram = static_cast<unsigned int>(
-                        reinterpret_cast<uintptr_t>(program->getHandle()));
-                    printf("Calling renderSkybox with shader: %d, texture: %d\n", shaderProgram,
-                           skybox->getTextureID());
-                    backend->renderSkybox(*skybox->getMesh(), shaderProgram,
-                                          skybox->getTextureID());
-                } else {
-                    printf("Skybox program is null\n");
-                }
-            } else {
-                printf("Skybox material is null\n");
-            }
-        } else {
-            // printf("Skybox is null\n");
-        }
-    } else {
-        printf("Backend or camera is null\n");
     }
 }

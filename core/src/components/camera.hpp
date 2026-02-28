@@ -1,15 +1,13 @@
-#ifndef CAMERA_HPP
-#define CAMERA_HPP
+#ifndef CAMERA_COMPONENT_HPP
+#define CAMERA_COMPONENT_HPP
 
-#include "color.hpp"
-#include "skybox.hpp"
-#include "vector3.hpp"
+#include "../color.hpp"
+#include "../skybox.hpp"
+#include "component.hpp"
 
-class Camera {
+class Camera : public Component {
   private:
     ColorRGBA backgroundColor = {0.2f, 0.3f, 0.3f, 1.0f};
-    Vector3 position = {0.0f, 2.0f, 2.0f};
-    Vector3 target = {0.0f, 0.0f, 0.0f};
     std::unique_ptr<Skybox> skybox;
     float fov = 45.0f;
     float nearDistance = 0.1f;
@@ -23,10 +21,6 @@ class Camera {
     Camera() = default;
     ~Camera() = default;
 
-    const Vector3& getPosition() const;
-    void setPosition(const Vector3& position);
-    const Vector3& getTarget() const;
-    void setTarget(const Vector3& target);
     ColorRGBA& getBackgroundColor();
     void setBackgroundColor(const ColorRGBA& color);
     void setFov(float fov);
@@ -42,7 +36,6 @@ class Camera {
     float getAspectRatio() const;
     void setOrthoSize(float size);
     float getOrthoSize() const;
-    
     void setSkybox(std::unique_ptr<Skybox> skybox);
     Skybox* getSkybox() const;
     void setOrthographic(bool ortho);

@@ -1,10 +1,11 @@
 #ifndef SPRITE_RENDERER_HPP
 #define SPRITE_RENDERER_HPP
 
-#include "material.hpp"
+#include "component.hpp"
+#include "../material.hpp"
 #include <memory>
 
-class SpriteRenderer {
+class SpriteRenderer : public Component {
 private:
     std::unique_ptr<Material> material;
 

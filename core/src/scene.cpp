@@ -1,50 +1,36 @@
 #include "scene.hpp"
+#include "components/light.hpp"
 
-Scene::~Scene() {
-    if (gameObjects) {
-        for (GameObject* obj : *gameObjects) {
-            delete obj;
-        }
-        delete gameObjects;
-    }
+Scene::Scene() : objectManager(std::make_unique<WorldObjectManager>()) {}
 
-    if (lights != nullptr) {
-        delete lights;
-    }
+WorldObjectManager* Scene::getObjectManager() { return objectManager.get(); }
 
-    if (mainCamera != nullptr) {
-        delete mainCamera;
-    }
+const WorldObjectManager* Scene::getObjectManager() const { return objectManager.get(); }
+
+void Scene::setCameraObject(WorldObject* obj) { cameraObject = obj; }
+
+WorldObject* Scene::getCameraObject() const { return cameraObject; }
+
+Camera* Scene::getCamera() const {
+    return cameraObject ? cameraObject->getComponent<Camera>() : nullptr;
 }
 
-void Scene::setCamera(Camera* cam) { 
-    mainCamera = cam; 
-};
+std::vector<WorldObject*> Scene::getLightObjects() const {
+    std::vector<WorldObject*> result;
+    for (auto& obj : objectManager->getObjects()) {
+        if (obj->hasComponent<Light>()) {
+            result.push_back(obj.get());
+        }
+    }
+    return result;
+}
 
-Camera* Scene::getCamera() const { 
-    return mainCamera; 
-};
-
-void Scene::setGameObjects(std::vector<GameObject*>* gos) { 
-    gameObjects = gos; 
-};
-
-std::vector<GameObject*>* Scene::getGameObjects() { 
-    return gameObjects; 
-};
-
-const std::vector<GameObject*>* Scene::getGameObjects() const { 
-    return gameObjects; 
-};
-
-void Scene::setLights(std::vector<Light>* l) { 
-    lights = l; 
-};
-
-std::vector<Light>* Scene::getLights() { 
-    return lights; 
-};
-
-const std::vector<Light>* Scene::getLights() const { 
-    return lights; 
-};
+std::vector<WorldObject*> Scene::getRenderableObjects() const {
+    std::vector<WorldObject*> result;
+    for (auto& obj : objectManager->getObjects()) {
+        if (obj->hasMesh() || obj->hasSprite()) {
+            result.push_back(obj.get());
+        }
+    }
+    return result;
+}
