@@ -18,6 +18,7 @@ endif()
 if(EMSCRIPTEN)
     include_directories(${CMAKE_SOURCE_DIR}/core/libs)
     add_compile_definitions(PLATFORM_WEBGL)
+    add_compile_definitions(MAX_WORLD_OBJECTS=64)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s NO_DISABLE_EXCEPTION_CATCHING")
     
@@ -48,6 +49,7 @@ if(EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_SDL=2 -s USE_WEBGL2=1 -s FULL_ES3=1 -s ALLOW_MEMORY_GROWTH=1 -s ASSERTIONS=2 ${PRELOAD_FILES_STR}")
 else()
     set(OpenGL_GL_PREFERENCE GLVND)
+    add_compile_definitions(MAX_WORLD_OBJECTS=10240)
     find_package(SDL2 REQUIRED)
     find_package(GLEW REQUIRED)
     find_package(glm REQUIRED)
@@ -127,7 +129,7 @@ file(GLOB PXS_SHADERS "${CMAKE_SOURCE_DIR}/*.pxs")
 if(EMSCRIPTEN)
     set(SPIRV_CROSS_ARGS --es --version 300)
 else()
-    set(SPIRV_CROSS_ARGS --no-es --version 330 --separate-shader-objects)
+    set(SPIRV_CROSS_ARGS --no-es --version 430 --separate-shader-objects)
 endif()
 
 foreach(SHADER_FILE ${VXS_SHADERS})
@@ -137,7 +139,7 @@ foreach(SHADER_FILE ${VXS_SHADERS})
 
     add_custom_command(
         OUTPUT ${SPIRV_FILE}
-        COMMAND ${DXC_EXECUTABLE} -spirv -T vs_6_0 -E main ${SHADER_FILE} -Fo ${SPIRV_FILE}
+        COMMAND ${DXC_EXECUTABLE} -spirv -T vs_6_0 -E main -fvk-t-shift 3 0 ${SHADER_FILE} -Fo ${SPIRV_FILE}
         DEPENDS ${SHADER_FILE}
         COMMENT "Compiling ${SHADER_FILE} -> ${SPIRV_FILE}"
     )

@@ -1,3 +1,8 @@
+// Força uso da GPU dedicada em sistemas com múltiplas GPUs
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
 
 #include "engine_context.hpp"
 #include "input/i_input_factory.hpp"
@@ -86,6 +91,19 @@ void main_loop() {
     while (running) {
         timer.tick();
         float deltaTime = timer.getDeltaTime();
+
+        // PRINT FPS
+        static float elapsed = 0.0f;
+        static int frameCount = 0;
+
+        elapsed += deltaTime;
+        frameCount++;
+
+        if (elapsed >= 1.0f) {
+            printf("Average FPS: %d\n", frameCount);
+            elapsed = 0.0f;
+            frameCount = 0;
+        }
 
         engine.getInputSystem().processEvents();
 

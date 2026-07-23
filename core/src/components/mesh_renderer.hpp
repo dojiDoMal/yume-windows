@@ -7,11 +7,11 @@
 
 class MeshRenderer : public Component {
   private:
-    std::unique_ptr<Material> material;
+    std::shared_ptr<Material> material;
 
   public:
     MeshRenderer() = default;
-    void setMaterial(std::unique_ptr<Material> m) { material = std::move(m); };
+    void setMaterial(std::shared_ptr<Material> m) { material = std::move(m); };
     Material* getMaterial() { return material.get(); }
     const Material* getMaterial() const { return material.get(); }
     bool hasMaterial() const { return material != nullptr; }

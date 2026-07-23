@@ -134,9 +134,9 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
         return;
 
     auto& worldObjects = j["worldObjects"];
-    scene.worldObjectCount = worldObjects.size();
+    scene.worldObjectCount = std::min(worldObjects.size(), (size_t)MAX_WORLD_OBJECTS);
 
-    for (size_t i = 0; i < worldObjects.size() && i < 32; i++) {
+    for (size_t i = 0; i < worldObjects.size() && i < MAX_WORLD_OBJECTS; i++) {
         auto& wo = worldObjects[i];
         auto& woData = scene.worldObjects[i];
 
@@ -199,13 +199,13 @@ int main(int argc, char* argv[]) {
 
     json j = json::parse(input);
 
-    CompiledScene scene;
-    compileWorldObjects(scene, j);
+    auto scene = std::make_unique<CompiledScene>(); // <- heap
+    compileWorldObjects(*scene, j);
 
     std::ofstream output(argv[2], std::ios::binary);
-    output.write(reinterpret_cast<char*>(&scene), sizeof(CompiledScene));
+    output.write(reinterpret_cast<char*>(scene.get()), sizeof(CompiledScene));
 
-    std::cout << "Scene compiled successfully: " << scene.worldObjectCount << " world objects"
+    std::cout << "Scene compiled successfully: " << scene->worldObjectCount << " world objects"
               << std::endl;
 
     return 0;

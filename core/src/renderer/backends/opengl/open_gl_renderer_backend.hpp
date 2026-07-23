@@ -12,12 +12,31 @@
 
 class OpenGLRendererBackend : public RendererBackend {
   private:
+    GLuint instanceSSBO = 0;
     GLuint spriteVAO = 0;
     GLuint spriteVBO = 0;
     GLuint matricesUBO = 0;
     GLuint materialDataUBO = 0;
     GLuint lightDataUBO = 0;
     std::unordered_map<std::string, GLuint> uniformBindings;
+
+    struct RenderKey {
+        GLuint vao;
+        GLuint shader;
+        bool operator==(const RenderKey& o) const { return vao == o.vao && shader == o.shader; }
+    };
+    struct RenderKeyHash {
+        size_t operator()(const RenderKey& k) const {
+            return std::hash<GLuint>()(k.vao) ^ (std::hash<GLuint>()(k.shader) << 16);
+        }
+    };
+    struct InstanceGroup {
+        std::vector<glm::mat4> models;
+        const Mesh* mesh = nullptr;
+        Material* material = nullptr;
+    };
+    std::unordered_map<RenderKey, InstanceGroup, RenderKeyHash> instanceGroups;
+    std::vector<WorldObject*> nonInstancedObjects;
 
     void initSpriteQuad();
 

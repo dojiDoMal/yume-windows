@@ -21,6 +21,8 @@ GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::
 std::string OpenGLRendererBackend::getShaderExtension() const { return ".glsl"; }
 
 OpenGLRendererBackend::~OpenGLRendererBackend() {
+    if (instanceSSBO)
+        glDeleteBuffers(1, &instanceSSBO);
     if (matricesUBO)
         glDeleteBuffers(1, &matricesUBO);
     if (materialDataUBO)
@@ -60,6 +62,8 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
 
 bool OpenGLRendererBackend::init() {
     GLenum err = glewInit();
+    printf("OpenGL: %s | GPU: %s\n", glGetString(GL_VERSION), glGetString(GL_RENDERER));
+
     if (GLEW_OK != err) {
         std::string glewErr = reinterpret_cast<const char*>(glewGetErrorString(err));
         LOG_ERROR("GLEW initialization failed: " + glewErr);
@@ -91,6 +95,11 @@ bool OpenGLRendererBackend::init() {
     uniformBindings["MaterialData"] = materialDataUBO;
     uniformBindings["LightData"] = lightDataUBO;
 
+    glGenBuffers(1, &instanceSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, instanceSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
     initSpriteQuad();
 
     return true;
@@ -106,7 +115,7 @@ void OpenGLRendererBackend::clear(Camera* camera) {
 }
 
 bool OpenGLRendererBackend::initWindowContext() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
@@ -202,41 +211,109 @@ void OpenGLRendererBackend::applyMaterial(Material* material) {
 
 void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
                                                const std::vector<Light*>& lights) {
-    for (auto* obj : objects) { // Remover const
-        glm::mat4 model = obj->getTransform().getModelMatrix();
 
+    nonInstancedObjects.clear();
+    for (auto& [vao, group] : instanceGroups)
+        group.models.clear();
+
+    for (auto* obj : objects) {
+        if (!obj->hasMesh())
+            continue;
+        auto* meshRenderer = obj->getComponent<MeshRenderer>();
+        if (!meshRenderer || !meshRenderer->getMaterial())
+            continue;
+
+        // printf("instancing: %d\n",
+        //        meshRenderer->getMaterial()->isInstancingEnabled()); // adiciona isso
+
+        if (!meshRenderer->getMaterial()->isInstancingEnabled()) {
+            nonInstancedObjects.push_back(obj);
+            continue;
+        }
+
+        auto* mesh = obj->getMesh();
+        auto* mat = meshRenderer->getMaterial();
+        auto vao = static_cast<GLuint>(reinterpret_cast<uintptr_t>(mesh->getMeshBufferHandle()));
+        auto shader =
+            static_cast<GLuint>(reinterpret_cast<uintptr_t>(mat->getShaderProgram()->getHandle()));
+        RenderKey key{vao, shader};
+
+        auto& group = instanceGroups[key];
+        if (!group.mesh) {
+            group.mesh = mesh;
+            group.material = mat;
+        }
+        group.models.push_back(obj->getTransform().getModelMatrix());
+    }
+
+    static bool printed = false;
+    if (!printed) {
+        printf("Groups: %zu\n", instanceGroups.size());
+        for (auto& [key, group] : instanceGroups)
+            printf("  VAO %u shader %u: %zu instances\n", key.vao, key.shader, group.models.size());
+        printed = true;
+    }
+
+    // instanced
+    for (auto& [key, group] : instanceGroups) {
+        if (group.models.empty())
+            continue;
+        auto* mat = group.material;
+        mat->use();
+        applyMaterial(mat);
+        if (!lights.empty())
+            mat->applyLight(*lights[0]);
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, instanceSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, group.models.size() * sizeof(glm::mat4),
+                     group.models.data(), GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceSSBO);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        glBindVertexArray(key.vao);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, group.mesh->getVertices().size() / 3,
+                              static_cast<GLsizei>(group.models.size()));
+        glBindVertexArray(0);
+    }
+
+    // non-instanced — matrix individual via UBO
+    for (auto* obj : nonInstancedObjects) {
+        auto* meshRenderer = obj->getComponent<MeshRenderer>();
+        auto* mat = meshRenderer->getMaterial();
+        auto* mesh = obj->getMesh();
+        auto* program = mat->getShaderProgramSingle();
+
+        glm::mat4 model = obj->getTransform().getModelMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        if (obj->hasSprite()) {
-            auto sprite = obj->getSprite();
-            auto spriteRenderer = obj->getComponent<SpriteRenderer>();
+        program->use();
+        if (!lights.empty())
+            mat->applyLight(*lights[0]);
 
-            if (spriteRenderer) {
-                auto mat = spriteRenderer->getMaterial();
-                if (mat) {
-                    mat->use();
-                    applyMaterial(mat);
-                    drawSprite(*sprite);
-                }
-            }
-        } else if (obj->hasMesh()) {
-            auto mesh = obj->getMesh();
-            auto meshRenderer = obj->getComponent<MeshRenderer>();
+        auto vao = static_cast<GLuint>(reinterpret_cast<uintptr_t>(mesh->getMeshBufferHandle()));
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, mesh->getVertices().size() / 3);
+        glBindVertexArray(0);
+    }
 
-            if (meshRenderer) {
-                auto mat = meshRenderer->getMaterial();
-                if (mat) {
-                    mat->use();
-                    applyMaterial(mat);
-                    if (!lights.empty()) {
-                        mat->applyLight(*lights[0]);
-                    }
-                    draw(*mesh);
-                }
-            }
-        }
+    for (auto* obj : objects) {
+        if (!obj->hasSprite())
+            continue;
+        auto* spriteRenderer = obj->getComponent<SpriteRenderer>();
+        if (!spriteRenderer || !spriteRenderer->getMaterial())
+            continue;
+
+        glm::mat4 model = obj->getTransform().getModelMatrix();
+        glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        auto* mat = spriteRenderer->getMaterial();
+        mat->use();
+        applyMaterial(mat);
+        drawSprite(*obj->getSprite());
     }
 }
 

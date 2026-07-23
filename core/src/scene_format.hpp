@@ -5,6 +5,14 @@
 #include "vector3.hpp"
 #include <cstdint>
 
+#ifndef MAX_WORLD_OBJECTS
+#define MAX_WORLD_OBJECTS 1024
+#endif
+
+#ifndef MAX_COMPONENTS_PER_OBJECT
+#define MAX_COMPONENTS_PER_OBJECT 8
+#endif
+
 struct LightData {
     uint8_t type; // 0=DIRECTIONAL, 1=POINT, 2=SPOT
     Vector3 direction;
@@ -102,13 +110,13 @@ struct WorldObjectData {
     Vector3 rotation;
     Vector3 scale;
     uint8_t componentCount;
-    ComponentData components[8];
+    ComponentData components[MAX_COMPONENTS_PER_OBJECT];
 };
 
 struct CompiledScene {
     uint32_t magic = 0x53434E45;
     uint32_t worldObjectCount;
-    WorldObjectData worldObjects[32];
+    WorldObjectData worldObjects[MAX_WORLD_OBJECTS];
 };
 
 #endif

@@ -46,33 +46,43 @@ void SceneLoader::loadMeshRendererComponent(WorldObject* obj, const ComponentDat
         LOG_ERROR("Failed to load mesh: " + std::string(meshData.path));
         return;
     }
-    mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
-    mesh->configure();
 
-    auto shaderExt = rendererBackend->getShaderExtension();
-    auto vertexShader = std::make_unique<ShaderAsset>(materialData.vertexShaderPath + shaderExt,
-                                                      ShaderType::VERTEX);
-    vertexShader->setShaderCompiler(rendererBackend->createShaderCompiler());
+    // chave única por combinação de shaders + cor
+    auto& c = materialData.color;
+    std::string matKey = std::string(materialData.vertexShaderPath) + "|" +
+                         materialData.fragmentShaderPath + "|" + std::to_string(c.r) +
+                         std::to_string(c.g) + std::to_string(c.b) + std::to_string(c.a);
 
-    auto fragmentShader = std::make_unique<ShaderAsset>(materialData.fragmentShaderPath + shaderExt,
-                                                        ShaderType::FRAGMENT);
-    fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
+    auto matIt = materialCache.find(matKey);
+    if (matIt == materialCache.end()) {
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto vertexShader = std::make_unique<ShaderAsset>(materialData.vertexShaderPath + shaderExt,
+                                                          ShaderType::VERTEX);
+        vertexShader->setShaderCompiler(rendererBackend->createShaderCompiler());
 
-    auto material = std::make_unique<Material>();
-    material->setShaderProgram(rendererBackend->createShaderProgram());
-    material->setVertexShader(std::move(vertexShader));
-    material->setFragmentShader(std::move(fragmentShader));
-    material->setBaseColor(materialData.color);
+        auto fragmentShader = std::make_unique<ShaderAsset>(
+            materialData.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
+        fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
 
-    if (!material->init()) {
-        LOG_ERROR("Material init failed for mesh: " + std::string(meshData.path));
-        return;
+        auto material = std::make_shared<Material>();
+        material->setShaderProgram(rendererBackend->createShaderProgram());
+        material->setVertexShader(std::move(vertexShader));
+        material->setFragmentShader(std::move(fragmentShader));
+        material->setBaseColor(materialData.color);
+
+        if (!material->init()) {
+            LOG_ERROR("Material init failed for mesh: " + std::string(meshData.path));
+            return;
+        }
+
+        materialCache[matKey] = material;
+        matIt = materialCache.find(matKey);
     }
 
     auto meshRenderer = std::make_unique<MeshRenderer>();
-    meshRenderer->setMaterial(std::move(material));
+    meshRenderer->setMaterial(matIt->second); // shared_ptr
 
-    obj->setMesh(std::move(mesh));
+    obj->setMesh(mesh);
     obj->addComponent(std::move(meshRenderer));
 }
 
@@ -171,7 +181,11 @@ void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp
     obj->addComponent(std::move(light));
 }
 
-std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
+std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
+    auto it = meshCache.find(filepath);
+    if (it != meshCache.end())
+        return it->second;
+
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -243,9 +257,13 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
         }
     }
 
-    auto mesh = std::make_unique<Mesh>();
+    auto mesh = std::make_shared<Mesh>();
     mesh->setVertices(vertices);
     mesh->setNormals(normals);
+    mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
+    mesh->configure();
+
+    meshCache[filepath] = mesh;
     return mesh;
 }
 

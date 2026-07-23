@@ -15,7 +15,7 @@ class WorldObject {
     std::vector<std::unique_ptr<Component>> components;
 
     // TODO: Remover uso de mesh e sprite diretamente
-    std::unique_ptr<Mesh> mesh;
+    std::shared_ptr<Mesh> mesh;
     std::unique_ptr<Sprite> sprite;
 
   public:
@@ -57,7 +57,7 @@ class WorldObject {
     template <typename T> bool hasComponent() const { return getComponent<T>() != nullptr; }
 
     // TODO: remover suporte a legacy mesh/sprite
-    void setMesh(std::unique_ptr<Mesh> m) { mesh = std::move(m); }
+    void setMesh(std::shared_ptr<Mesh> m) { mesh = std::move(m); }
     Mesh* getMesh() { return mesh.get(); }
     const Mesh* getMesh() const { return mesh.get(); }
     bool hasMesh() const { return mesh != nullptr; }

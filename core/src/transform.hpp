@@ -9,6 +9,8 @@ class Transform {
     Vector3 position;
     Vector3 rotation;
     Vector3 scale;
+    mutable glm::mat4 cachedMatrix{1.0f};
+    mutable bool dirty = true;
 
   public:
     glm::mat4 getModelMatrix() const;
