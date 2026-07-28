@@ -1,6 +1,7 @@
 #ifndef SCENE_LOADER_HPP
 #define SCENE_LOADER_HPP
 
+#include "font_atlas.hpp"
 #include "material.hpp"
 #include "mesh.hpp"
 #include "renderer/renderer_backend.hpp"
@@ -17,12 +18,14 @@ class SceneLoader {
     RendererBackend* rendererBackend = nullptr;
     std::unordered_map<std::string, std::shared_ptr<Mesh>> meshCache;
     std::unordered_map<std::string, std::shared_ptr<Material>> materialCache;
+    std::unordered_map<std::string, std::shared_ptr<FontAtlas>> fontAtlasCache;
 
     std::shared_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
     void loadMeshRendererComponent(WorldObject* obj, const ComponentData& comp);
     void loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp);
-    void loadCameraComponent(WorldObject* obj, const ComponentData& comp); // ADICIONAR
-    void loadLightComponent(WorldObject* obj, const ComponentData& comp);  // ADICIONAR
+    void loadCameraComponent(WorldObject* obj, const ComponentData& comp);
+    void loadLightComponent(WorldObject* obj, const ComponentData& comp);
+    void loadTextRendererComponent(WorldObject* obj, const ComponentData& comp);
 
   public:
     SceneLoader();

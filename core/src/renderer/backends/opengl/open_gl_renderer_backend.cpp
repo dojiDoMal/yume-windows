@@ -12,9 +12,12 @@
 #include "shader_program_factory.hpp"
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
+#include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <sstream>
+
 
 GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::OPENGL; }
 
@@ -29,6 +32,16 @@ OpenGLRendererBackend::~OpenGLRendererBackend() {
         glDeleteBuffers(1, &materialDataUBO);
     if (lightDataUBO)
         glDeleteBuffers(1, &lightDataUBO);
+    if (textShaderProgram)
+        glDeleteProgram(textShaderProgram);
+    if (textVAO)
+        glDeleteVertexArrays(1, &textVAO);
+    if (textVBO)
+        glDeleteBuffers(1, &textVBO);
+    if (textUBOProjection)
+        glDeleteBuffers(1, &textUBOProjection);
+    if (textUBOColor)
+        glDeleteBuffers(1, &textUBOColor);
 }
 
 unsigned int OpenGLRendererBackend::getRequiredWindowFlags() const { return SDL_WINDOW_OPENGL; };
@@ -51,11 +64,16 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
         return false;
     }
 
+    // By default, SDL enables VSync (swap interval = 1),
+    // which caps the FPS to the monitor's refresh rate (60Hz).
     SDL_GLContext glContext = SDL_GL_CreateContext(window);
     if (!glContext) {
         LOG_ERROR("Failed to create OpenGL context!");
         return false;
     }
+
+    // TODO: configuração de projeto
+    SDL_GL_SetSwapInterval(0);
 
     return init();
 };
@@ -479,4 +497,184 @@ void OpenGLRendererBackend::drawSprite(const Sprite& sprite) {
     if (err != GL_NO_ERROR) {
         LOG_ERROR("OpenGL error in drawSprite: " + std::to_string(err));
     }
+}
+
+GLuint OpenGLRendererBackend::compileTextShader(const std::string& path, GLenum type) {
+    std::ifstream file(path);
+    if (!file.is_open())
+        return 0;
+    std::stringstream ss;
+    ss << file.rdbuf();
+    std::string src = ss.str();
+    const char* srcPtr = src.c_str();
+
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &srcPtr, nullptr);
+    glCompileShader(shader);
+
+    GLint ok;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetShaderInfoLog(shader, 512, nullptr, log);
+        printf("TextRenderer shader error: %s\n", log);
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+bool OpenGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
+                                     const std::string& vertPath, const std::string& fragPath) {
+    textAtlas = &atlas;
+    textTextureID = texID;
+
+    GLuint vert = compileTextShader(vertPath, GL_VERTEX_SHADER);
+    GLuint frag = compileTextShader(fragPath, GL_FRAGMENT_SHADER);
+    if (!vert || !frag)
+        return false;
+
+    textShaderProgram = glCreateProgram();
+    glAttachShader(textShaderProgram, vert);
+    glAttachShader(textShaderProgram, frag);
+    glLinkProgram(textShaderProgram);
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+
+    GLint ok;
+    glGetProgramiv(textShaderProgram, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetProgramInfoLog(textShaderProgram, 512, nullptr, log);
+        printf("TextRenderer link error: %s\n", log);
+        return false;
+    }
+
+    GLuint projBlock = glGetUniformBlockIndex(textShaderProgram, "type_TextUniforms");
+    if (projBlock != GL_INVALID_INDEX)
+        glUniformBlockBinding(textShaderProgram, projBlock, 4);
+
+    GLuint colorBlock = glGetUniformBlockIndex(textShaderProgram, "type_TextColor");
+    if (colorBlock != GL_INVALID_INDEX)
+        glUniformBlockBinding(textShaderProgram, colorBlock, 5);
+
+    struct ColorBlock {
+        glm::vec4 color;
+        float distRange;
+        float pad[3];
+    };
+
+    glGenBuffers(1, &textUBOProjection);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 4, textUBOProjection);
+
+    glGenBuffers(1, &textUBOColor);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOColor);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(ColorBlock), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 5, textUBOColor);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glGenVertexArrays(1, &textVAO);
+    glGenBuffers(1, &textVBO);
+    glBindVertexArray(textVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4 * 512, nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    glBindTexture(GL_TEXTURE_2D, textTextureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return true;
+}
+
+void OpenGLRendererBackend::drawText(const std::string& text, float x, float y, float scale,
+                                     glm::vec4 color, int screenWidth, int screenHeight) {
+    if (!textAtlas || !textShaderProgram)
+        return;
+
+    struct ColorBlock {
+        glm::vec4 color;
+        float distRange;
+        float pad[3];
+    };
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    GLint prevProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    glUseProgram(textShaderProgram);
+
+    glm::mat4 proj = glm::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(proj));
+
+    float screenPxRange = textAtlas->distanceRange * (scale / textAtlas->atlasSize);
+    ColorBlock colorData{color, screenPxRange, {}};
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOColor);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(ColorBlock), &colorData);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    GLint texLoc =
+        glGetUniformLocation(textShaderProgram, "SPIRV_Cross_CombinedmsdfTexturemsdfSampler");
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textTextureID);
+    if (texLoc != -1)
+        glUniform1i(texLoc, 0);
+
+    glBindVertexArray(textVAO);
+
+    std::vector<float> vertices;
+    vertices.reserve(text.size() * 6 * 4);
+
+    float cursorX = x;
+    uint32_t prevChar = 0;
+    for (char c : text) {
+        uint32_t unicode = (uint32_t)(unsigned char)c;
+        auto it = textAtlas->glyphs.find(unicode);
+        if (it == textAtlas->glyphs.end()) {
+            prevChar = unicode;
+            continue;
+        }
+
+        const GlyphInfo& g = it->second;
+        cursorX += textAtlas->getKerning(prevChar, unicode) * scale;
+
+        if (g.hasGeometry) {
+            float x0 = cursorX + g.planeLeft * scale, x1 = cursorX + g.planeRight * scale;
+            float y0 = y - g.planeTop * scale, y1 = y - g.planeBottom * scale;
+            float u0 = g.atlasLeft / textAtlas->atlasWidth,
+                  u1 = g.atlasRight / textAtlas->atlasWidth;
+            float v0 = 1.0f - (g.atlasBottom / textAtlas->atlasHeight);
+            float v1 = 1.0f - (g.atlasTop / textAtlas->atlasHeight);
+
+            float quad[6][4] = {
+                {x0, y0, u0, v1}, {x0, y1, u0, v0}, {x1, y1, u1, v0},
+                {x0, y0, u0, v1}, {x1, y1, u1, v0}, {x1, y0, u1, v1},
+            };
+            for (auto& v : quad)
+                vertices.insert(vertices.end(), v, v + 4);
+        }
+        cursorX += g.advance * scale;
+        prevChar = unicode;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(),
+                 GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(vertices.size() / 4));
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prevProgram);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }

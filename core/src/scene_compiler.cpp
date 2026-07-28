@@ -105,6 +105,28 @@ void compileCamera(ComponentData& compData, const json& comp) {
     }
 }
 
+void compileTextRenderer(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::TEXT_RENDERER;
+
+    std::string fontType = comp.value("fontType", "MSDF");
+    compData.textRenderer.fontType = FontType::MSDF;
+
+    std::string atlasPath = comp["font"]["atlasJsonPath"];
+    std::string texPath = comp["font"]["texturePath"];
+    std::string vertPath = comp["material"]["vertexShaderPath"];
+    std::string fragPath = comp["material"]["fragmentShaderPath"];
+
+    std::snprintf(compData.textRenderer.font.atlasJsonPath,
+                  sizeof(compData.textRenderer.font.atlasJsonPath), "%s", atlasPath.c_str());
+    std::snprintf(compData.textRenderer.font.texturePath,
+                  sizeof(compData.textRenderer.font.texturePath), "%s", texPath.c_str());
+    std::snprintf(compData.textRenderer.material.vertexShaderPath,
+                  sizeof(compData.textRenderer.material.vertexShaderPath), "%s", vertPath.c_str());
+    std::snprintf(compData.textRenderer.material.fragmentShaderPath,
+                  sizeof(compData.textRenderer.material.fragmentShaderPath), "%s",
+                  fragPath.c_str());
+}
+
 void compileLight(ComponentData& compData, const json& comp) {
     compData.type = ComponentType::LIGHT;
 
@@ -179,6 +201,8 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
                     compileCamera(woData.components[j], comp);
                 } else if (type == "LIGHT") {
                     compileLight(woData.components[j], comp);
+                } else if (type == "TEXT_RENDERER") {
+                    compileTextRenderer(woData.components[j], comp);
                 }
             }
         }

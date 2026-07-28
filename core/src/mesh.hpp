@@ -10,6 +10,8 @@ class Mesh {
     std::vector<float> vertices;
     std::vector<float> normals;
     std::unique_ptr<MeshBuffer> meshBuffer;
+    int uniqueVertexCount = 0;
+    int triangleCount = 0;
 
   public:
     Mesh() = default;
@@ -29,6 +31,11 @@ class Mesh {
 
     MeshBuffer* getMeshBuffer() const;
     void setMeshBuffer(std::unique_ptr<MeshBuffer> buffer);
+
+    int getUniqueVertexCount() const { return uniqueVertexCount; }
+    void setUniqueVertexCount(int v) { uniqueVertexCount = v; }
+    int getTriangleCount() const { return triangleCount; }
+    void setTriangleCount(int t) { triangleCount = t; }
 };
 
 #endif // MESH_HPP

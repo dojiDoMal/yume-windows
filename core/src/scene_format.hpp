@@ -61,7 +61,17 @@ enum class ComponentType : uint8_t {
     MESH_RENDERER = 1,
     SPRITE_RENDERER = 2,
     CAMERA = 3,
-    LIGHT = 4
+    LIGHT = 4,
+    TEXT_RENDERER = 5
+};
+
+enum class FontType : uint8_t {
+    MSDF = 0
+};
+
+struct MsdfFontData {
+    char atlasJsonPath[256];
+    char texturePath[256];
 };
 
 struct CameraComponentData {
@@ -79,6 +89,12 @@ struct LightComponentData {
     Vector3 direction;
     float color[4];
     float intensity;
+};
+
+struct TextRendererComponentData {
+    FontType fontType;
+    MsdfFontData font;
+    MaterialData material;
 };
 
 struct ComponentData {
@@ -102,6 +118,7 @@ struct ComponentData {
 
         CameraComponentData camera;
         LightComponentData light;
+        TextRendererComponentData textRenderer;
     };
 };
 

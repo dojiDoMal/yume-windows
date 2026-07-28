@@ -3,14 +3,15 @@
 
 #include "../components/camera.hpp"
 #include "../components/light.hpp"
+#include "../font_atlas.hpp"
 #include "../graphics_api.hpp"
 #include "../mesh.hpp"
 #include "../shader_program.hpp"
 #include "../sprite.hpp"
 #include "../world_object.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
-
 
 struct SDL_Window;
 
@@ -49,6 +50,14 @@ class RendererBackend {
                               unsigned int textureID) = 0;
 
     virtual void setBufferDataImpl(const std::string& name, const void* data, size_t size) = 0;
+
+    virtual bool initText(const FontAtlas& atlas, unsigned int textureID,
+                          const std::string& vertPath, const std::string& fragPath) {
+        return false;
+    }
+
+    virtual void drawText(const std::string& text, float x, float y, float scale, glm::vec4 color,
+                          int screenWidth, int screenHeight) {}
 
     template <typename T> void setBufferData(const std::string& name, const T* data) {
         setBufferDataImpl(name, static_cast<const void*>(data), sizeof(T));

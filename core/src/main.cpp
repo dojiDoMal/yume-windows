@@ -1,9 +1,11 @@
 // Força uso da GPU dedicada em sistemas com múltiplas GPUs
+// TODO: configuração de projeto
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+#include "components/text_renderer_component.hpp"
 #include "engine_context.hpp"
 #include "input/i_input_factory.hpp"
 
@@ -84,6 +86,7 @@ void main_loop() {
 
 void main_loop() {
     static Timer timer;
+    std::ostringstream ss;
 
     float moveSpeed = 2.0f;
 
@@ -92,17 +95,30 @@ void main_loop() {
         timer.tick();
         float deltaTime = timer.getDeltaTime();
 
-        // PRINT FPS
+        // PRINT FPS + STATS
         static float elapsed = 0.0f;
         static int frameCount = 0;
+        static int displayFPS = 0;
+        static int displayObjects = 0, displayVerts = 0, displayTris = 0;
 
         elapsed += deltaTime;
         frameCount++;
 
         if (elapsed >= 1.0f) {
-            printf("Average FPS: %d\n", frameCount);
+            displayFPS = frameCount;
             elapsed = 0.0f;
             frameCount = 0;
+
+            displayObjects = 0;
+            displayVerts = 0;
+            displayTris = 0;
+            for (auto& obj : sceneManager->getActiveScene()->getObjectManager()->getObjects()) {
+                if (obj->hasMesh()) {
+                    displayObjects++;
+                    displayVerts += obj->getMesh()->getUniqueVertexCount();
+                    displayTris += obj->getMesh()->getTriangleCount();
+                }
+            }
         }
 
         engine.getInputSystem().processEvents();
@@ -166,6 +182,37 @@ void main_loop() {
         }
 
         screenManager->render(*sceneManager->getActiveScene());
+
+        // PRINT SCENE STATISTICS
+        TextRenderer* textRenderer = nullptr;
+        for (auto& obj : sceneManager->getActiveScene()->getObjectManager()->getObjects()) {
+            if (auto* trc = obj->getComponent<TextRendererComponent>()) {
+                textRenderer = trc->getTextRenderer();
+                break;
+            }
+        }
+
+        if (textRenderer) {
+            char buf[64];
+            float tx = 20.0f, ty = 40.0f, lineH = 20.0f, scale = 20.0f;
+
+            snprintf(buf, sizeof(buf), "FPS: %d", displayFPS);
+            textRenderer->draw(buf, tx, ty, scale, {1, 1, 1, 1}, winDesc.width, winDesc.height);
+            snprintf(buf, sizeof(buf), "Objects: %d", displayObjects);
+            textRenderer->draw(buf, tx, ty + lineH, scale, {1, 1, 1, 1}, winDesc.width,
+                               winDesc.height);
+            snprintf(buf, sizeof(buf), "Vertices: %d", displayVerts);
+            textRenderer->draw(buf, tx, ty + lineH * 2, scale, {1, 1, 1, 1}, winDesc.width,
+                               winDesc.height);
+            snprintf(buf, sizeof(buf), "Faces: %d", displayTris);
+            textRenderer->draw(buf, tx, ty + lineH * 3, scale, {1, 1, 1, 1}, winDesc.width,
+                               winDesc.height);
+            snprintf(buf, sizeof(buf), "Triangles: %d", displayTris);
+            textRenderer->draw(buf, tx, ty + lineH * 4, scale, {1, 1, 1, 1}, winDesc.width,
+                               winDesc.height);
+        }
+        // PRINT SCENE STATISTICS
+
         screenManager->present();
     }
 

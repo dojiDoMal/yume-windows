@@ -8,6 +8,7 @@
 #include "components/light.hpp"
 #include "components/mesh_renderer.hpp"
 #include "components/sprite_renderer.hpp"
+#include "components/text_renderer_component.hpp"
 #include "material.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene_format.hpp"
@@ -168,6 +169,34 @@ void SceneLoader::loadCameraComponent(WorldObject* obj, const ComponentData& com
     obj->addComponent(std::move(camera));
 }
 
+void SceneLoader::loadTextRendererComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.textRenderer;
+
+    auto it = fontAtlasCache.find(data.font.atlasJsonPath);
+    if (it == fontAtlasCache.end()) {
+        auto atlas = std::make_shared<FontAtlas>();
+        if (!atlas->load(data.font.atlasJsonPath)) {
+            LOG_ERROR("Failed to load font atlas: " + std::string(data.font.atlasJsonPath));
+            return;
+        }
+        fontAtlasCache[data.font.atlasJsonPath] = atlas;
+        it = fontAtlasCache.find(data.font.atlasJsonPath);
+    }
+
+    unsigned int texID = rendererBackend->loadTexture(data.font.texturePath, 1);
+
+    auto shaderExt = rendererBackend->getShaderExtension();
+    auto textRenderer = std::make_unique<TextRenderer>();
+    textRenderer->init(*rendererBackend, *it->second, texID,
+                       std::string(data.material.vertexShaderPath) + shaderExt,
+                       std::string(data.material.fragmentShaderPath) + shaderExt);
+
+    auto component = std::make_unique<TextRendererComponent>();
+    component->setFontAtlas(std::make_unique<FontAtlas>(*it->second));
+    component->setTextRenderer(std::move(textRenderer));
+    obj->addComponent(std::move(component));
+}
+
 void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp) {
     auto& lightData = comp.light;
 
@@ -263,6 +292,12 @@ std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
     mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
     mesh->configure();
 
+    mesh->setUniqueVertexCount((int)vertices.size() / 3);
+    int totalTris = 0;
+    for (const auto& shape : shapes)
+        totalTris += (int)shape.mesh.indices.size() / 3;
+    mesh->setTriangleCount(totalTris);
+
     meshCache[filepath] = mesh;
     return mesh;
 }
@@ -303,6 +338,10 @@ void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledSc
             case ComponentType::LIGHT:
                 LOG_INFO("  - Loading LIGHT component");
                 loadLightComponent(obj, comp);
+                break;
+            case ComponentType::TEXT_RENDERER:
+                LOG_INFO("  - Loading TEXT_RENDERER component");
+                loadTextRendererComponent(obj, comp);
                 break;
             default:
                 break;
