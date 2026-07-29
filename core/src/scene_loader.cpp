@@ -6,6 +6,7 @@
 
 #include "components/camera.hpp"
 #include "components/light.hpp"
+#include "components/lod_group.hpp"
 #include "components/mesh_renderer.hpp"
 #include "components/sprite_renderer.hpp"
 #include "components/text_renderer_component.hpp"
@@ -18,9 +19,64 @@
 #include "stb_image.h"
 #include <fstream>
 
+
 SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
 
 void SceneLoader::setRendererBackend(RendererBackend& backend) { rendererBackend = &backend; }
+
+void SceneLoader::loadLodGroupComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.lodGroup;
+
+    auto& matData = data.material;
+    auto& c = matData.color;
+    std::string matKey = std::string(matData.vertexShaderPath) + "|" + matData.fragmentShaderPath +
+                         "|" + std::to_string(c.r) + std::to_string(c.g) + std::to_string(c.b) +
+                         std::to_string(c.a);
+
+    auto matIt = materialCache.find(matKey);
+    if (matIt == materialCache.end()) {
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto vs =
+            std::make_unique<ShaderAsset>(matData.vertexShaderPath + shaderExt, ShaderType::VERTEX);
+        vs->setShaderCompiler(rendererBackend->createShaderCompiler());
+        auto fs = std::make_unique<ShaderAsset>(matData.fragmentShaderPath + shaderExt,
+                                                ShaderType::FRAGMENT);
+        fs->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto material = std::make_shared<Material>();
+        material->setShaderProgram(rendererBackend->createShaderProgram());
+        material->setVertexShader(std::move(vs));
+        material->setFragmentShader(std::move(fs));
+        material->setBaseColor(matData.color);
+        if (!material->init()) {
+            LOG_ERROR("Material init failed for LOD_GROUP");
+            return;
+        }
+        materialCache[matKey] = material;
+        matIt = materialCache.find(matKey);
+    }
+
+    auto lodGroup = std::make_unique<LodGroup>();
+
+    for (uint8_t i = 0; i < data.levelCount; i++) {
+        auto& lvl = data.levels[i];
+        auto mesh = loadObjMesh(lvl.mesh.path, lvl.mesh.shadeSmooth);
+        if (!mesh) {
+            LOG_ERROR("Failed to load LOD mesh: " + std::string(lvl.mesh.path));
+            return;
+        }
+        lodGroup->addLevel(mesh, lvl.screenSpaceThreshold);
+    }
+
+    // Seta o mesh do LOD0 como mesh inicial do objeto
+    if (data.levelCount > 0)
+        obj->setMesh(loadObjMesh(data.levels[0].mesh.path, data.levels[0].mesh.shadeSmooth));
+
+    auto meshRenderer = std::make_unique<MeshRenderer>();
+    meshRenderer->setMaterial(matIt->second);
+    obj->addComponent(std::move(meshRenderer));
+    obj->addComponent(std::move(lodGroup));
+}
 
 CompiledScene* SceneLoader::loadCompiledScene(const std::string& filepath) {
     if (!validateSceneFile(filepath))
@@ -342,6 +398,10 @@ void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledSc
             case ComponentType::TEXT_RENDERER:
                 LOG_INFO("  - Loading TEXT_RENDERER component");
                 loadTextRendererComponent(obj, comp);
+                break;
+            case ComponentType::LOD_GROUP:
+                LOG_INFO("  - Loading LOD_GROUP component");
+                loadLodGroupComponent(obj, comp);
                 break;
             default:
                 break;

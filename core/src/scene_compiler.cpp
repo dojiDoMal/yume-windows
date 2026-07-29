@@ -11,6 +11,31 @@
 
 using json = nlohmann::json;
 
+void compileLodGroup(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::LOD_GROUP;
+
+    auto& levels = comp["levels"];
+    compData.lodGroup.levelCount = (uint8_t)std::min(levels.size(), (size_t)MAX_LOD_LEVELS);
+
+    for (size_t i = 0; i < compData.lodGroup.levelCount; i++) {
+        auto& lvl = levels[i];
+        std::string path = lvl["mesh"]["path"];
+        std::snprintf(compData.lodGroup.levels[i].mesh.path,
+                      sizeof(compData.lodGroup.levels[i].mesh.path), "%s", path.c_str());
+        compData.lodGroup.levels[i].mesh.shadeSmooth = lvl["mesh"].value("shadeSmooth", true);
+        compData.lodGroup.levels[i].screenSpaceThreshold = lvl["screenSpaceThreshold"];
+    }
+
+    std::string vertPath = comp["material"]["vertexShaderPath"];
+    std::string fragPath = comp["material"]["fragmentShaderPath"];
+    std::array<float, 4> color = comp["material"]["color"];
+    std::snprintf(compData.lodGroup.material.vertexShaderPath,
+                  sizeof(compData.lodGroup.material.vertexShaderPath), "%s", vertPath.c_str());
+    std::snprintf(compData.lodGroup.material.fragmentShaderPath,
+                  sizeof(compData.lodGroup.material.fragmentShaderPath), "%s", fragPath.c_str());
+    compData.lodGroup.material.color = {color[0], color[1], color[2], color[3]};
+}
+
 void compileMeshRenderer(ComponentData& compData, const json& comp) {
     compData.type = ComponentType::MESH_RENDERER;
 
@@ -203,6 +228,8 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
                     compileLight(woData.components[j], comp);
                 } else if (type == "TEXT_RENDERER") {
                     compileTextRenderer(woData.components[j], comp);
+                } else if (type == "LOD_GROUP") {
+                    compileLodGroup(woData.components[j], comp);
                 }
             }
         }

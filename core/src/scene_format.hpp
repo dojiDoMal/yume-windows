@@ -13,6 +13,10 @@
 #define MAX_COMPONENTS_PER_OBJECT 8
 #endif
 
+#ifndef MAX_LOD_LEVELS
+#define MAX_LOD_LEVELS 4
+#endif
+
 struct LightData {
     uint8_t type; // 0=DIRECTIONAL, 1=POINT, 2=SPOT
     Vector3 direction;
@@ -62,12 +66,11 @@ enum class ComponentType : uint8_t {
     SPRITE_RENDERER = 2,
     CAMERA = 3,
     LIGHT = 4,
-    TEXT_RENDERER = 5
+    TEXT_RENDERER = 5,
+    LOD_GROUP = 6
 };
 
-enum class FontType : uint8_t {
-    MSDF = 0
-};
+enum class FontType : uint8_t { MSDF = 0 };
 
 struct MsdfFontData {
     char atlasJsonPath[256];
@@ -97,6 +100,17 @@ struct TextRendererComponentData {
     MaterialData material;
 };
 
+struct LodLevelData {
+    MeshData mesh;
+    float screenSpaceThreshold;
+};
+
+struct LodGroupData {
+    uint8_t levelCount;
+    LodLevelData levels[MAX_LOD_LEVELS];
+    MaterialData material;
+};
+
 struct ComponentData {
     ComponentType type;
     union {
@@ -119,6 +133,7 @@ struct ComponentData {
         CameraComponentData camera;
         LightComponentData light;
         TextRendererComponentData textRenderer;
+        LodGroupData lodGroup;
     };
 };
 

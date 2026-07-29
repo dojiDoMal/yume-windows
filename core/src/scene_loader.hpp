@@ -12,7 +12,6 @@
 #include <string>
 #include <unordered_map>
 
-
 class SceneLoader {
   private:
     RendererBackend* rendererBackend = nullptr;
@@ -26,6 +25,7 @@ class SceneLoader {
     void loadCameraComponent(WorldObject* obj, const ComponentData& comp);
     void loadLightComponent(WorldObject* obj, const ComponentData& comp);
     void loadTextRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadLodGroupComponent(WorldObject* obj, const ComponentData& comp);
 
   public:
     SceneLoader();

@@ -18,7 +18,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <sstream>
 
-
 GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::OPENGL; }
 
 std::string OpenGLRendererBackend::getShaderExtension() const { return ".glsl"; }
@@ -72,8 +71,9 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
         return false;
     }
 
-    // TODO: configuração de projeto
-    SDL_GL_SetSwapInterval(0);
+    // TODO: configuração de projeto / jogo
+    // SDL_GL_SetSwapInterval(0) está disparando o cooler do notebook
+    SDL_GL_SetSwapInterval(1);
 
     return init();
 };
