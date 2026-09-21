@@ -27,12 +27,13 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
 #include <SDL2/SDL.h>
 
+#include "renderer_config.hpp"
+
 #ifdef PLATFORM_WEBGL
+// WebGL is fixed to its own API regardless of project.conf.
 GraphicsAPI graphicsAPI = GraphicsAPI::WEBGL;
-#else
-// ou GraphicsAPI::VULKAN
-GraphicsAPI graphicsAPI = GraphicsAPI::OPENGL;
 #endif
+RendererConfig rendererConfig;
 
 std::unique_ptr<WindowManager> screenManager;
 std::unique_ptr<SceneManager> sceneManager;
@@ -49,7 +50,18 @@ void init() {
     winDesc.height = 600;
 
     screenManager = std::make_unique<WindowManager>();
+
+#ifdef PLATFORM_WEBGL
+    // WebGL ignores project.conf's api; keep its fixed API and default config.
     screenManager->setGraphicsApi(graphicsAPI);
+#else
+    // Load project-level renderer config (api/srgb/vsync) from project.conf.
+    // Missing/invalid file falls back to safe defaults inside the loader.
+    rendererConfig = loadRendererConfig("project.conf");
+    screenManager->setGraphicsApi(rendererConfig.api);
+    screenManager->setRendererConfig(rendererConfig);
+#endif
+
     screenManager->init(winDesc);
 
     rendererBackend = screenManager->getRenderer()->getRendererBackend();
@@ -181,6 +193,17 @@ void main_loop() {
             transform.setRotation(rot);
         }
 
+        // Toggle frustum culling with 'F' (edge-detected: one press = one toggle)
+        {
+            static bool prevFKey = false;
+            bool fKey = engine.getInputSystem().isKeyPressed(SDLK_f);
+            if (fKey && !prevFKey && rendererBackend) {
+                rendererBackend->setFrustumCullingEnabled(
+                    !rendererBackend->isFrustumCullingEnabled());
+            }
+            prevFKey = fKey;
+        }
+
         screenManager->render(*sceneManager->getActiveScene());
 
         // PRINT SCENE STATISTICS
@@ -193,21 +216,30 @@ void main_loop() {
         }
 
         if (textRenderer) {
-            char buf[64];
+            char buf[128];
             float tx = 20.0f, ty = 40.0f, lineH = 20.0f, scale = 20.0f;
+
+            // Per-frame counts of what the renderer actually drew (post-cull),
+            // read from the backend. The "display*" values are scene totals.
+            int drawnObjects =
+                rendererBackend ? rendererBackend->getDrawnObjects() : displayObjects;
+            int drawnTris = rendererBackend ? rendererBackend->getDrawnTris() : displayTris;
+            int frustumCulled = rendererBackend ? rendererBackend->getFrustumCulledObjects() : 0;
+            bool cullOn = rendererBackend ? rendererBackend->isFrustumCullingEnabled() : false;
 
             snprintf(buf, sizeof(buf), "FPS: %d", displayFPS);
             textRenderer->draw(buf, tx, ty, scale, {1, 1, 1, 1}, winDesc.width, winDesc.height);
-            snprintf(buf, sizeof(buf), "Objects: %d", displayObjects);
+            snprintf(buf, sizeof(buf), "Objects: %d / %d (culled %d)", drawnObjects, displayObjects,
+                     frustumCulled);
             textRenderer->draw(buf, tx, ty + lineH, scale, {1, 1, 1, 1}, winDesc.width,
                                winDesc.height);
             snprintf(buf, sizeof(buf), "Vertices: %d", displayVerts);
             textRenderer->draw(buf, tx, ty + lineH * 2, scale, {1, 1, 1, 1}, winDesc.width,
                                winDesc.height);
-            snprintf(buf, sizeof(buf), "Faces: %d", displayTris);
+            snprintf(buf, sizeof(buf), "Triangles: %d / %d", drawnTris, displayTris);
             textRenderer->draw(buf, tx, ty + lineH * 3, scale, {1, 1, 1, 1}, winDesc.width,
                                winDesc.height);
-            snprintf(buf, sizeof(buf), "Triangles: %d", displayTris);
+            snprintf(buf, sizeof(buf), "Frustum cull: %s (press F)", cullOn ? "ON" : "OFF");
             textRenderer->draw(buf, tx, ty + lineH * 4, scale, {1, 1, 1, 1}, winDesc.width,
                                winDesc.height);
         }

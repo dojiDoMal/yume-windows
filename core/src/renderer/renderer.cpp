@@ -3,9 +3,12 @@
 
 #include "../components/lod_group.hpp"
 #include "../world_object.hpp"
+#include "frustum.hpp"
 #include "renderer.hpp"
 #include "renderer_factory.hpp"
+#include <algorithm>
 #include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
 
 Renderer::~Renderer() {
     if (backend) {
@@ -89,13 +92,74 @@ void Renderer::render(const Scene& scene) {
         }
     }
 
-    std::vector<WorldObject*> renderableObjects;
-    for (auto& obj : scene.getObjectManager()->getObjects()) {
-        if (obj->hasMesh() || obj->hasSprite()) {
-            renderableObjects.push_back(obj.get());
+    // Build the camera frustum from a view-projection matrix reconstructed
+    // from the camera transform + parameters (mirrors the backend's
+    // bindCamera). Used for CPU frustum culling below.
+    Frustum frustum;
+    bool frustumValid = false;
+    if (backend->isFrustumCullingEnabled() && camObj) {
+        const auto camPos = camObj->getTransform().getPosition();
+        const auto camRot = camObj->getTransform().getRotation();
+
+        float yawRad = glm::radians(camRot.y);
+        float pitchRad = glm::radians(camRot.x);
+        glm::vec3 forward;
+        forward.x = std::cos(pitchRad) * std::sin(yawRad);
+        forward.y = std::sin(pitchRad);
+        forward.z = std::cos(pitchRad) * std::cos(yawRad);
+        forward = glm::normalize(forward);
+        forward = -forward; // OpenGL forward is -Z
+
+        glm::vec3 camPosVec(camPos.x, camPos.y, camPos.z);
+        glm::mat4 view = glm::lookAt(camPosVec, camPosVec + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        glm::mat4 projection;
+        if (camera->isOrthographic()) {
+            float orthoSize = camera->getOrthoSize();
+            float aspect = camera->getAspectRatio();
+            projection = glm::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
+                                    camera->getNearDistance(), camera->getFarDistance());
+        } else {
+            projection = glm::perspective(glm::radians(camera->getFov()), camera->getAspectRatio(),
+                                          camera->getNearDistance(), camera->getFarDistance());
         }
+
+        frustum.fromViewProjection(projection * view);
+        frustumValid = true;
     }
 
+    int frustumCulled = 0;
+    std::vector<WorldObject*> renderableObjects;
+    for (auto& obj : scene.getObjectManager()->getObjects()) {
+        if (!(obj->hasMesh() || obj->hasSprite()))
+            continue;
+
+        // Frustum cull mesh objects that have a valid bounding sphere.
+        // Sprites and mesh-less objects are always kept.
+        if (frustumValid && obj->hasMesh()) {
+            auto* mesh = obj->getMesh();
+            if (mesh && mesh->hasBounds()) {
+                glm::mat4 model = obj->getTransform().getModelMatrix();
+                glm::vec3 worldCenter =
+                    glm::vec3(model * glm::vec4(mesh->getBoundingCenter(), 1.0f));
+
+                // Scale the radius by the largest axis scale so the sphere
+                // still encloses the mesh after non-uniform scaling.
+                const auto scl = obj->getTransform().getScale();
+                float maxScale = std::max({std::abs(scl.x), std::abs(scl.y), std::abs(scl.z)});
+                float worldRadius = mesh->getBoundingRadius() * maxScale;
+
+                if (!frustum.intersectsSphere(worldCenter, worldRadius)) {
+                    frustumCulled++;
+                    continue; // outside the frustum -> skip
+                }
+            }
+        }
+
+        renderableObjects.push_back(obj.get());
+    }
+
+    backend->setFrustumCulledObjects(frustumCulled);
     backend->renderWorldObjects(renderableObjects, lights);
 }
 

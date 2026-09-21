@@ -71,9 +71,8 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
         return false;
     }
 
-    // TODO: configuração de projeto / jogo
-    // SDL_GL_SetSwapInterval(0) está disparando o cooler do notebook
-    SDL_GL_SetSwapInterval(1);
+    // Vsync from project.conf: 1 = cap to refresh rate, 0 = uncapped.
+    SDL_GL_SetSwapInterval(vsyncEnabled ? 1 : 0);
 
     return init();
 };
@@ -91,6 +90,15 @@ bool OpenGLRendererBackend::init() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // sRGB output from project.conf. When enabled, the default framebuffer
+    // applies a linear->sRGB conversion on write; when disabled (default),
+    // colors are written as-is (historical behavior). Requires an sRGB-capable
+    // default framebuffer, which SDL provides by default.
+    if (srgbEnabled)
+        glEnable(GL_FRAMEBUFFER_SRGB);
+    else
+        glDisable(GL_FRAMEBUFFER_SRGB);
 
     glGenBuffers(1, &matricesUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
@@ -230,6 +238,12 @@ void OpenGLRendererBackend::applyMaterial(Material* material) {
 void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
                                                const std::vector<Light*>& lights) {
 
+    // Reset per-frame draw statistics. (frustumCulledObjects is set by
+    // Renderer::render before this call, so it is intentionally not reset here.)
+    drawnObjects = 0;
+    drawnVerts = 0;
+    drawnTris = 0;
+
     nonInstancedObjects.clear();
     for (auto& [vao, group] : instanceGroups)
         group.models.clear();
@@ -289,9 +303,14 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
         glBindVertexArray(key.vao);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, group.mesh->getVertices().size() / 3,
-                              static_cast<GLsizei>(group.models.size()));
+        const GLsizei vertsPerInstance = static_cast<GLsizei>(group.mesh->getVertices().size() / 3);
+        const GLsizei instanceCount = static_cast<GLsizei>(group.models.size());
+        glDrawArraysInstanced(GL_TRIANGLES, 0, vertsPerInstance, instanceCount);
         glBindVertexArray(0);
+
+        drawnObjects += instanceCount;
+        drawnVerts += static_cast<int>(vertsPerInstance) * instanceCount;
+        drawnTris += static_cast<int>(vertsPerInstance / 3) * instanceCount;
     }
 
     // non-instanced — matrix individual via UBO
@@ -311,9 +330,14 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
             mat->applyLight(*lights[0]);
 
         auto vao = static_cast<GLuint>(reinterpret_cast<uintptr_t>(mesh->getMeshBufferHandle()));
+        const GLsizei vertCount = static_cast<GLsizei>(mesh->getVertices().size() / 3);
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, mesh->getVertices().size() / 3);
+        glDrawArrays(GL_TRIANGLES, 0, vertCount);
         glBindVertexArray(0);
+
+        drawnObjects++;
+        drawnVerts += static_cast<int>(vertCount);
+        drawnTris += static_cast<int>(vertCount / 3);
     }
 
     for (auto* obj : objects) {

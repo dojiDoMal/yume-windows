@@ -169,9 +169,14 @@ foreach(SHADER_FILE ${PXS_SHADERS})
     set(SPIRV_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.spv")
     set(GLSL_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.glsl")
     
+    # -fvk-s-shift 1 0: shift HLSL sampler registers (s#) by +1 in the SPIR-V so
+    # a separate image (t0 -> binding 0) and its sampler (s0) don't collide on
+    # the same Vulkan binding. text.pxs uses msdfTexture(t0)+msdfSampler(s0);
+    # this puts the sampler at binding 1. Harmless for shaders without samplers
+    # (flat.pxs). Only affects the SPIR-V/Vulkan path, not DXIL or GLSL output.
     add_custom_command(
         OUTPUT ${SPIRV_FILE}
-        COMMAND ${DXC_EXECUTABLE} -spirv -T ps_6_0 -E main ${SHADER_FILE} -Fo ${SPIRV_FILE}
+        COMMAND ${DXC_EXECUTABLE} -spirv -T ps_6_0 -E main -fvk-s-shift 1 0 ${SHADER_FILE} -Fo ${SPIRV_FILE}
         DEPENDS ${SHADER_FILE}
         COMMENT "Compiling ${SHADER_FILE} -> ${SPIRV_FILE}"
     )
@@ -186,5 +191,42 @@ foreach(SHADER_FILE ${PXS_SHADERS})
     list(APPEND GLSL_FILES ${GLSL_FILE})
 endforeach()
 
-add_custom_target(Shaders ALL DEPENDS ${GLSL_FILES})
+# -----------------------------------------------------------------------------
+# HLSL -> DXIL (.cso) compilation for the DirectX 12 backend.
+#
+# The D3D12 backend expects precompiled DXIL bytecode next to the source HLSL,
+# named "<name>.vxs.cso" / "<name>.pxs.cso" so it matches the runtime path
+# "<vertexShaderPath>" + getShaderExtension() (".cso").
+# This mirrors the existing SPIR-V/GLSL steps: same HLSL source, extra target.
+# Windows-only (dxc emits DXIL) and skipped for the WebGL build.
+# -----------------------------------------------------------------------------
+if(WIN32 AND NOT EMSCRIPTEN)
+    set(CSO_FILES)
+
+    foreach(SHADER_FILE ${VXS_SHADERS})
+        get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
+        set(CSO_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.vxs.cso")
+        add_custom_command(
+            OUTPUT ${CSO_FILE}
+            COMMAND ${DXC_EXECUTABLE} -T vs_6_0 -E main ${SHADER_FILE} -Fo ${CSO_FILE}
+            DEPENDS ${SHADER_FILE}
+            COMMENT "Compiling ${SHADER_FILE} -> ${CSO_FILE} (DXIL)"
+        )
+        list(APPEND CSO_FILES ${CSO_FILE})
+    endforeach()
+
+    foreach(SHADER_FILE ${PXS_SHADERS})
+        get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
+        set(CSO_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.cso")
+        add_custom_command(
+            OUTPUT ${CSO_FILE}
+            COMMAND ${DXC_EXECUTABLE} -T ps_6_0 -E main ${SHADER_FILE} -Fo ${CSO_FILE}
+            DEPENDS ${SHADER_FILE}
+            COMMENT "Compiling ${SHADER_FILE} -> ${CSO_FILE} (DXIL)"
+        )
+        list(APPEND CSO_FILES ${CSO_FILE})
+    endforeach()
+endif()
+
+add_custom_target(Shaders ALL DEPENDS ${GLSL_FILES} ${CSO_FILES})
 add_dependencies(main compile_scenes)

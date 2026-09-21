@@ -1,8 +1,7 @@
 #include "renderer/renderer_backend.hpp"
 #define CLASS_NAME "WindowManager"
-#include "window_manager.hpp"
 #include "log_macros.hpp"
-
+#include "window_manager.hpp"
 
 WindowManager::~WindowManager() {
     if (renderer) {
@@ -14,9 +13,7 @@ WindowManager::~WindowManager() {
     SDL_Quit();
 }
 
-void WindowManager::render(Scene& scene) {
-    renderer->render(scene);
-}
+void WindowManager::render(Scene& scene) { renderer->render(scene); }
 
 void WindowManager::present() {
     if (renderer) {
@@ -31,6 +28,13 @@ bool WindowManager::init(const WindowDesc& desc) {
     if (!renderer->initBackend(graphicsApi)) {
         LOG_ERROR("Failed to initialize renderer backend!");
         return false;
+    }
+
+    // Propagate presentation config to the backend before any GPU init, so each
+    // backend picks the right swapchain/framebuffer format and present mode.
+    if (auto* backend = renderer->getRendererBackend()) {
+        backend->setSrgbEnabled(rendererConfig.srgb);
+        backend->setVsyncEnabled(rendererConfig.vsync);
     }
 
     unsigned int flags = SDL_WINDOW_SHOWN | desc.extraFlags |

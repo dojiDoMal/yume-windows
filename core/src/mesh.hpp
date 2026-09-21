@@ -2,6 +2,7 @@
 #define MESH_HPP
 
 #include "mesh_buffer.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -12,6 +13,14 @@ class Mesh {
     std::unique_ptr<MeshBuffer> meshBuffer;
     int uniqueVertexCount = 0;
     int triangleCount = 0;
+
+    // Local-space bounding sphere, computed once from the vertices.
+    // Used by frustum culling so we don't rescan vertices every frame.
+    glm::vec3 boundingCenter{0.0f};
+    float boundingRadius = 0.0f;
+    bool boundsComputed = false;
+
+    void computeBounds();
 
   public:
     Mesh() = default;
@@ -24,6 +33,11 @@ class Mesh {
     bool configure();
     void bind();
     void unbind();
+
+    // Local-space bounding sphere accessors (valid after configure()/setVertices()).
+    const glm::vec3& getBoundingCenter() const { return boundingCenter; }
+    float getBoundingRadius() const { return boundingRadius; }
+    bool hasBounds() const { return boundsComputed; }
 
     void* getHandle() const;
     void* getMeshHandle() const;
