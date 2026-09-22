@@ -13,6 +13,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #include "scene_manager.hpp"
 #include "stb_image_header.hpp"
 
+#include "color.hpp"
 #include "logger.hpp"
 #include "timer.hpp"
 #include "vector3.hpp"
@@ -228,19 +229,19 @@ void main_loop() {
             bool cullOn = rendererBackend ? rendererBackend->isFrustumCullingEnabled() : false;
 
             snprintf(buf, sizeof(buf), "FPS: %d", displayFPS);
-            textRenderer->draw(buf, tx, ty, scale, {1, 1, 1, 1}, winDesc.width, winDesc.height);
+            textRenderer->draw(buf, tx, ty, scale, COLOR::WHITE, winDesc.width, winDesc.height);
             snprintf(buf, sizeof(buf), "Objects: %d / %d (culled %d)", drawnObjects, displayObjects,
                      frustumCulled);
-            textRenderer->draw(buf, tx, ty + lineH, scale, {1, 1, 1, 1}, winDesc.width,
+            textRenderer->draw(buf, tx, ty + lineH, scale, COLOR::WHITE, winDesc.width,
                                winDesc.height);
             snprintf(buf, sizeof(buf), "Vertices: %d", displayVerts);
-            textRenderer->draw(buf, tx, ty + lineH * 2, scale, {1, 1, 1, 1}, winDesc.width,
+            textRenderer->draw(buf, tx, ty + lineH * 2, scale, COLOR::WHITE, winDesc.width,
                                winDesc.height);
             snprintf(buf, sizeof(buf), "Triangles: %d / %d", drawnTris, displayTris);
-            textRenderer->draw(buf, tx, ty + lineH * 3, scale, {1, 1, 1, 1}, winDesc.width,
+            textRenderer->draw(buf, tx, ty + lineH * 3, scale, COLOR::WHITE, winDesc.width,
                                winDesc.height);
             snprintf(buf, sizeof(buf), "Frustum cull: %s (press F)", cullOn ? "ON" : "OFF");
-            textRenderer->draw(buf, tx, ty + lineH * 4, scale, {1, 1, 1, 1}, winDesc.width,
+            textRenderer->draw(buf, tx, ty + lineH * 4, scale, COLOR::WHITE, winDesc.width,
                                winDesc.height);
         }
         // PRINT SCENE STATISTICS

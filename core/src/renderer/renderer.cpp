@@ -61,9 +61,7 @@ void Renderer::render(const Scene& scene) {
     // Atualizar LOD
     WorldObject* camObj = camera->getOwner();
     if (camObj) {
-        glm::vec3 camPos(camObj->getTransform().getPosition().x,
-                         camObj->getTransform().getPosition().y,
-                         camObj->getTransform().getPosition().z);
+        Vector3 camPos = camObj->getTransform().getPosition();
 
         for (auto& obj : scene.getObjectManager()->getObjects()) {
             auto* lodGroup = obj->getComponent<LodGroup>();
@@ -82,9 +80,7 @@ void Renderer::render(const Scene& scene) {
                 }
             }
 
-            glm::vec3 objPos(obj->getTransform().getPosition().x,
-                             obj->getTransform().getPosition().y,
-                             obj->getTransform().getPosition().z);
+            Vector3 objPos = obj->getTransform().getPosition();
 
             bool visible =
                 lodGroup->update(objPos, radius, camPos, camera->getFov(), camera->getHeight());
@@ -140,8 +136,8 @@ void Renderer::render(const Scene& scene) {
             auto* mesh = obj->getMesh();
             if (mesh && mesh->hasBounds()) {
                 glm::mat4 model = obj->getTransform().getModelMatrix();
-                glm::vec3 worldCenter =
-                    glm::vec3(model * glm::vec4(mesh->getBoundingCenter(), 1.0f));
+                const Vector3& bc = mesh->getBoundingCenter();
+                glm::vec3 worldCenter = glm::vec3(model * glm::vec4(bc.x, bc.y, bc.z, 1.0f));
 
                 // Scale the radius by the largest axis scale so the sphere
                 // still encloses the mesh after non-uniform scaling.
@@ -149,7 +145,8 @@ void Renderer::render(const Scene& scene) {
                 float maxScale = std::max({std::abs(scl.x), std::abs(scl.y), std::abs(scl.z)});
                 float worldRadius = mesh->getBoundingRadius() * maxScale;
 
-                if (!frustum.intersectsSphere(worldCenter, worldRadius)) {
+                if (!frustum.intersectsSphere({worldCenter.x, worldCenter.y, worldCenter.z},
+                                              worldRadius)) {
                     frustumCulled++;
                     continue; // outside the frustum -> skip
                 }

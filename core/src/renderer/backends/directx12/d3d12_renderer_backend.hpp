@@ -172,7 +172,7 @@ class D3D12RendererBackend : public RendererBackend {
 
     bool initText(const FontAtlas& atlas, unsigned int textureID, const std::string& vertPath,
                   const std::string& fragPath) override;
-    void drawText(const std::string& text, float x, float y, float scale, glm::vec4 color,
+    void drawText(const std::string& text, float x, float y, float scale, ColorRGBA color,
                   int screenWidth, int screenHeight) override;
 
   private:

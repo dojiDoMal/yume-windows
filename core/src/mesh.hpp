@@ -2,7 +2,7 @@
 #define MESH_HPP
 
 #include "mesh_buffer.hpp"
-#include <glm/glm.hpp>
+#include "vector3.hpp"
 #include <memory>
 #include <vector>
 
@@ -16,7 +16,7 @@ class Mesh {
 
     // Local-space bounding sphere, computed once from the vertices.
     // Used by frustum culling so we don't rescan vertices every frame.
-    glm::vec3 boundingCenter{0.0f};
+    Vector3 boundingCenter{0.0f, 0.0f, 0.0f};
     float boundingRadius = 0.0f;
     bool boundsComputed = false;
 
@@ -35,7 +35,7 @@ class Mesh {
     void unbind();
 
     // Local-space bounding sphere accessors (valid after configure()/setVertices()).
-    const glm::vec3& getBoundingCenter() const { return boundingCenter; }
+    const Vector3& getBoundingCenter() const { return boundingCenter; }
     float getBoundingRadius() const { return boundingRadius; }
     bool hasBounds() const { return boundsComputed; }
 

@@ -6,7 +6,7 @@ bool TextRenderer::init(RendererBackend& b, const FontAtlas& atlas, unsigned int
     return backend->initText(atlas, textureID, vertPath, fragPath);
 }
 
-void TextRenderer::draw(const std::string& text, float x, float y, float scale, glm::vec4 color,
+void TextRenderer::draw(const std::string& text, float x, float y, float scale, ColorRGBA color,
                         int screenWidth, int screenHeight) {
     if (backend)
         backend->drawText(text, x, y, scale, color, screenWidth, screenHeight);

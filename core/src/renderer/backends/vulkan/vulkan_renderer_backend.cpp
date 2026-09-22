@@ -1688,7 +1688,7 @@ bool VulkanRendererBackend::initText(const FontAtlas& atlas, unsigned int textur
     VkDescriptorBufferInfo colorInfo{};
     colorInfo.buffer = textCB;
     colorInfo.offset = 0;
-    colorInfo.range = sizeof(glm::vec4) + sizeof(float) * 4; // color + distRange (+pad)
+    colorInfo.range = sizeof(ColorRGBA) + sizeof(float) * 4; // color + distRange (+pad)
 
     VkWriteDescriptorSet w[4] = {};
     w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1726,7 +1726,7 @@ void VulkanRendererBackend::beginTextFrame() {
 }
 
 void VulkanRendererBackend::drawText(const std::string& text, float x, float y, float scale,
-                                     glm::vec4 color, int screenWidth, int screenHeight) {
+                                     ColorRGBA color, int screenWidth, int screenHeight) {
     if (!textAtlas || textPipeline == VK_NULL_HANDLE || textTextureID == 0)
         return;
     if (textCBCursor + 2 > textCBSlots)
@@ -1788,7 +1788,7 @@ void VulkanRendererBackend::drawText(const std::string& text, float x, float y, 
     memcpy(cbBase + projSlot * textCBSlotSize, glm::value_ptr(proj), sizeof(glm::mat4));
 
     struct ColorBlock {
-        glm::vec4 color;
+        ColorRGBA color;
         float distRange;
         float pad[3];
     } colorData{color, textAtlas->distanceRange * (scale / textAtlas->atlasSize), {0, 0, 0}};

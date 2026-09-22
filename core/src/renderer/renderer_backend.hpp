@@ -1,6 +1,7 @@
 #ifndef RENDERER_BACKEND_HPP
 #define RENDERER_BACKEND_HPP
 
+#include "../color.hpp"
 #include "../components/camera.hpp"
 #include "../components/light.hpp"
 #include "../font_atlas.hpp"
@@ -91,7 +92,7 @@ class RendererBackend {
         return false;
     }
 
-    virtual void drawText(const std::string& text, float x, float y, float scale, glm::vec4 color,
+    virtual void drawText(const std::string& text, float x, float y, float scale, ColorRGBA color,
                           int screenWidth, int screenHeight) {}
 
     template <typename T> void setBufferData(const std::string& name, const T* data) {

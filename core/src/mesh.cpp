@@ -1,4 +1,5 @@
 #include "mesh.hpp"
+#include "math.hpp"
 #include <GL/glew.h>
 #include <cmath>
 
@@ -12,7 +13,7 @@ bool Mesh::configure() {
 }
 
 void Mesh::computeBounds() {
-    boundingCenter = glm::vec3(0.0f);
+    boundingCenter = VECTOR3::ZEROS;
     boundingRadius = 0.0f;
     boundsComputed = true;
 
@@ -20,20 +21,20 @@ void Mesh::computeBounds() {
         return;
 
     // Pass 1: axis-aligned bounding box, use its center as the sphere center.
-    glm::vec3 minP(vertices[0], vertices[1], vertices[2]);
-    glm::vec3 maxP = minP;
+    Vector3 minP{vertices[0], vertices[1], vertices[2]};
+    Vector3 maxP = minP;
     for (size_t i = 0; i + 2 < vertices.size(); i += 3) {
-        glm::vec3 p(vertices[i], vertices[i + 1], vertices[i + 2]);
-        minP = glm::min(minP, p);
-        maxP = glm::max(maxP, p);
+        Vector3 p{vertices[i], vertices[i + 1], vertices[i + 2]};
+        minP = Yume::Math::min(minP, p);
+        maxP = Yume::Math::max(maxP, p);
     }
     boundingCenter = (minP + maxP) * 0.5f;
 
     // Pass 2: radius = max distance from center to any vertex.
     float maxDistSq = 0.0f;
     for (size_t i = 0; i + 2 < vertices.size(); i += 3) {
-        glm::vec3 p(vertices[i], vertices[i + 1], vertices[i + 2]);
-        float d2 = glm::dot(p - boundingCenter, p - boundingCenter);
+        Vector3 p{vertices[i], vertices[i + 1], vertices[i + 2]};
+        float d2 = Yume::Math::dot(p - boundingCenter, p - boundingCenter);
         if (d2 > maxDistSq)
             maxDistSq = d2;
     }

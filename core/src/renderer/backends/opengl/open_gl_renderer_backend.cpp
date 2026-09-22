@@ -583,7 +583,7 @@ bool OpenGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
         glUniformBlockBinding(textShaderProgram, colorBlock, 5);
 
     struct ColorBlock {
-        glm::vec4 color;
+        ColorRGBA color;
         float distRange;
         float pad[3];
     };
@@ -619,12 +619,12 @@ bool OpenGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
 }
 
 void OpenGLRendererBackend::drawText(const std::string& text, float x, float y, float scale,
-                                     glm::vec4 color, int screenWidth, int screenHeight) {
+                                     ColorRGBA color, int screenWidth, int screenHeight) {
     if (!textAtlas || !textShaderProgram)
         return;
 
     struct ColorBlock {
-        glm::vec4 color;
+        ColorRGBA color;
         float distRange;
         float pad[3];
     };

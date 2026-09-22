@@ -1,6 +1,8 @@
 #ifndef FRUSTUM_HPP
 #define FRUSTUM_HPP
 
+#include "../math.hpp"
+#include "../vector3.hpp"
 #include <glm/glm.hpp>
 
 // A view frustum represented as its 6 clipping planes, extracted from a
@@ -20,12 +22,12 @@ class Frustum {
         const glm::vec4 row2(m[0][2], m[1][2], m[2][2], m[3][2]);
         const glm::vec4 row3(m[0][3], m[1][3], m[2][3], m[3][3]);
 
-        planes[LEFT]   = row3 + row0;
-        planes[RIGHT]  = row3 - row0;
+        planes[LEFT] = row3 + row0;
+        planes[RIGHT] = row3 - row0;
         planes[BOTTOM] = row3 + row1;
-        planes[TOP]    = row3 - row1;
-        planes[NEAR]   = row3 + row2;
-        planes[FAR]    = row3 - row2;
+        planes[TOP] = row3 - row1;
+        planes[NEAR] = row3 + row2;
+        planes[FAR] = row3 - row2;
 
         for (int i = 0; i < PLANE_COUNT; ++i)
             normalizePlane(planes[i]);
@@ -34,10 +36,10 @@ class Frustum {
     // Returns true if the world-space sphere is at least partially inside the
     // frustum. A sphere is fully outside only if it lies entirely on the
     // negative side of any single plane.
-    bool intersectsSphere(const glm::vec3& center, float radius) const {
+    bool intersectsSphere(const Vector3& center, float radius) const {
         for (int i = 0; i < PLANE_COUNT; ++i) {
-            float dist = planes[i].x * center.x + planes[i].y * center.y +
-                         planes[i].z * center.z + planes[i].w;
+            float dist = planes[i].x * center.x + planes[i].y * center.y + planes[i].z * center.z +
+                         planes[i].w;
             if (dist < -radius)
                 return false; // completely behind this plane -> outside
         }
@@ -48,7 +50,7 @@ class Frustum {
     glm::vec4 planes[PLANE_COUNT];
 
     static void normalizePlane(glm::vec4& p) {
-        float len = glm::length(glm::vec3(p.x, p.y, p.z));
+        float len = Yume::Math::length({p.x, p.y, p.z});
         if (len > 0.0f)
             p /= len;
     }

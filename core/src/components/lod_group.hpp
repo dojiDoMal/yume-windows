@@ -1,10 +1,11 @@
 #ifndef LOD_GROUP_HPP
 #define LOD_GROUP_HPP
 
+#include "../math.hpp"
 #include "../mesh.hpp"
+#include "../vector3.hpp"
 #include "component.hpp"
 #include <cmath>
-#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -18,10 +19,9 @@ class LodGroup : public Component {
     std::vector<LodLevel> levels;
     int activeLevelIndex = 0;
 
-    float computeScreenSpacePercentage(const glm::vec3& objPos, float radius,
-                                       const glm::vec3& camPos, float fovRad,
-                                       float viewportHeight) const {
-        float dist = glm::length(objPos - camPos);
+    float computeScreenSpacePercentage(const Vector3& objPos, float radius, const Vector3& camPos,
+                                       float fovRad, float viewportHeight) const {
+        float dist = Yume::Math::length(objPos - camPos);
         if (dist < 0.0001f)
             return 1.0f;
         float projectedSize = (radius / (dist * std::tan(fovRad * 0.5f)));
@@ -34,9 +34,9 @@ class LodGroup : public Component {
     }
 
     // Retorna true se o objeto deve ser renderizado (não culled)
-    bool update(const glm::vec3& objPos, float boundingRadius, const glm::vec3& camPos,
-                float fovDeg, float viewportHeight) {
-        float fovRad = glm::radians(fovDeg);
+    bool update(const Vector3& objPos, float boundingRadius, const Vector3& camPos, float fovDeg,
+                float viewportHeight) {
+        float fovRad = Yume::Math::radians(fovDeg);
         float ssp =
             computeScreenSpacePercentage(objPos, boundingRadius, camPos, fovRad, viewportHeight);
 
