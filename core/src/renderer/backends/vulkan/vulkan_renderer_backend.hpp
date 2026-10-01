@@ -1,10 +1,10 @@
 #ifndef VULKAN_RENDERER_BACKEND_HPP
 #define VULKAN_RENDERER_BACKEND_HPP
 
+#include "../../../matrix4.hpp"
 #include "../../../mesh.hpp"
 #include "../../../world_object.hpp"
 #include "../../renderer_backend.hpp"
-#include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -52,7 +52,7 @@ class VulkanRendererBackend : public RendererBackend {
     VkBuffer instanceBuffer = VK_NULL_HANDLE;
     VkDeviceMemory instanceBufferMemory = VK_NULL_HANDLE;
     void* instanceBufferMapped = nullptr;
-    size_t instanceBufferCapacity = 0;  // in number of glm::mat4
+    size_t instanceBufferCapacity = 0;  // in number of Matrix4
     size_t instanceBufferCursor = 0;    // next free matrix slot, per frame
     VkDeviceSize instanceAlignment = 0; // min storage buffer offset alignment
 
@@ -102,7 +102,7 @@ class VulkanRendererBackend : public RendererBackend {
         }
     };
     struct InstanceGroup {
-        std::vector<glm::mat4> models;
+        std::vector<Matrix4> models;
         const Mesh* mesh = nullptr;
         Material* material = nullptr;
     };
@@ -113,7 +113,7 @@ class VulkanRendererBackend : public RendererBackend {
     void beginInstanceFrame();
     // Appends `count` matrices to the arena; writes `outOffset` (byte offset,
     // aligned) for the dynamic descriptor binding. Returns false on overflow.
-    bool appendInstanceData(const glm::mat4* models, size_t count, uint32_t& outOffset);
+    bool appendInstanceData(const Matrix4* models, size_t count, uint32_t& outOffset);
 
     // ---- Textures ------------------------------------------------------------
     // loadTexture returns a 1-based id into these entries (0 = none). The MSDF

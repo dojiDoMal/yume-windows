@@ -2,6 +2,7 @@
 #include "../../../log_macros.hpp"
 
 #include "../../../components/mesh_renderer.hpp"
+#include "../../../math.hpp"
 #include "../../../mesh_buffer_factory.hpp"
 #include "../../../shader_compiler_factory.hpp"
 #include "../../../shader_program_factory.hpp"
@@ -12,9 +13,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #include <fstream>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <sstream>
 
 GraphicsAPI D3D12RendererBackend::getGraphicsAPI() const { return GraphicsAPI::DIRECTX12; }
@@ -399,24 +397,24 @@ void D3D12RendererBackend::bindCamera(Camera* camera) {
     if (!cameraObj)
         return;
 
-    glm::mat4 model = glm::mat4(1.0f);
+    Matrix4 model = Matrix4(1.0f);
 
     const auto camPos = cameraObj->getTransform().getPosition();
     const auto camRot = cameraObj->getTransform().getRotation();
 
     // Forward vector from yaw/pitch. Kept identical to the OpenGL backend so
     // camera controls (main.cpp WASD) behave the same across both APIs.
-    glm::vec3 forward;
-    float yawRad = glm::radians(camRot.y);
-    float pitchRad = glm::radians(camRot.x);
+    Vector3 forward;
+    float yawRad = Yume::Math::radians(camRot.y);
+    float pitchRad = Yume::Math::radians(camRot.x);
     forward.x = cos(pitchRad) * sin(yawRad);
     forward.y = sin(pitchRad);
     forward.z = cos(pitchRad) * cos(yawRad);
-    forward = glm::normalize(forward);
-    forward = -forward; // match OpenGL's -Z forward convention
+    forward = Yume::Math::normalize(forward);
+    forward = forward * -1.0f; // match OpenGL's -Z forward convention
 
-    glm::vec3 camPosVec(camPos.x, camPos.y, camPos.z);
-    glm::vec3 target = camPosVec + forward;
+    Vector3 camPosVec{camPos.x, camPos.y, camPos.z};
+    Vector3 target = camPosVec + forward;
 
     // Convention: match OpenGL exactly (right-handed, -Z forward). The ONLY
     // thing D3D12 needs differently is the clip-space depth range: [0,1]
@@ -424,23 +422,25 @@ void D3D12RendererBackend::bindCamera(Camera* camera) {
     // projection as the OpenGL backend and only switch to the *_ZO
     // ("zero-to-one" depth) projection variants. This keeps the X axis,
     // triangle winding and camera controls identical across both backends.
-    glm::mat4 view = glm::lookAt(camPosVec, target, glm::vec3(0.0f, 1.0f, 0.0f));
+    Matrix4 view = Yume::Math::lookAt(camPosVec, target, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 projection;
+    Matrix4 projection;
     if (camera->isOrthographic()) {
         float orthoSize = camera->getOrthoSize();
         float aspect = camera->getAspectRatio();
-        projection = glm::orthoRH_ZO(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
-                                     camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::orthoRH_ZO(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
+                                   camera->getNearDistance(), camera->getFarDistance());
     } else {
-        projection = glm::perspectiveRH_ZO(glm::radians(camera->getFov()), camera->getAspectRatio(),
-                                           camera->getNearDistance(), camera->getFarDistance());
+        projection = Yume::Math::perspectiveRH_ZO(
+            Yume::Math::radians(camera->getFov()), camera->getAspectRatio(),
+            camera->getNearDistance(), camera->getFarDistance());
     }
 
     struct {
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 projection;
+        Matrix4 model;
+        Matrix4 view;
+        Matrix4 projection;
     } matrices = {model, view, projection};
 
     memcpy(constantBufferData[0], &matrices, sizeof(matrices));
@@ -519,7 +519,7 @@ void D3D12RendererBackend::beginInstanceFrame(size_t totalMatrices) {
 
         D3D12_RESOURCE_DESC bufferDesc = {};
         bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufferDesc.Width = newCapacity * sizeof(glm::mat4);
+        bufferDesc.Width = newCapacity * sizeof(Matrix4);
         bufferDesc.Height = 1;
         bufferDesc.DepthOrArraySize = 1;
         bufferDesc.MipLevels = 1;
@@ -537,7 +537,7 @@ void D3D12RendererBackend::beginInstanceFrame(size_t totalMatrices) {
     }
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS D3D12RendererBackend::appendInstanceData(const glm::mat4* models,
+D3D12_GPU_VIRTUAL_ADDRESS D3D12RendererBackend::appendInstanceData(const Matrix4* models,
                                                                    size_t count) {
     if (count == 0 || !instanceBuffer || !instanceBufferData)
         return 0;
@@ -548,11 +548,11 @@ D3D12_GPU_VIRTUAL_ADDRESS D3D12RendererBackend::appendInstanceData(const glm::ma
     }
 
     size_t offsetMatrices = instanceBufferCursor;
-    auto* dst = static_cast<glm::mat4*>(instanceBufferData) + offsetMatrices;
-    memcpy(dst, models, count * sizeof(glm::mat4));
+    auto* dst = static_cast<Matrix4*>(instanceBufferData) + offsetMatrices;
+    memcpy(dst, models, count * sizeof(Matrix4));
     instanceBufferCursor += count;
 
-    return instanceBuffer->GetGPUVirtualAddress() + offsetMatrices * sizeof(glm::mat4);
+    return instanceBuffer->GetGPUVirtualAddress() + offsetMatrices * sizeof(Matrix4);
 }
 
 void D3D12RendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
@@ -648,7 +648,7 @@ void D3D12RendererBackend::renderWorldObjects(const std::vector<WorldObject*>& o
         if (!lights.empty())
             mat->applyLight(*lights[0]);
 
-        glm::mat4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getTransform().getModelMatrix();
         D3D12_GPU_VIRTUAL_ADDRESS instanceAddr = appendInstanceData(&model, 1);
         if (instanceAddr)
             commandList->SetGraphicsRootShaderResourceView(3, instanceAddr);
@@ -1083,13 +1083,13 @@ void D3D12RendererBackend::drawText(const std::string& text, float x, float y, f
 
     // Projection (b4) matches OpenGL: top-left origin ortho. Use RH_ZO so depth
     // is valid for D3D12 (depth is unused here anyway since depth test is off).
-    glm::mat4 proj =
-        glm::orthoRH_ZO(0.0f, (float)screenWidth, (float)screenHeight, 0.0f, -1.0f, 1.0f);
+    Matrix4 proj =
+        Yume::Math::orthoRH_ZO(0.0f, (float)screenWidth, (float)screenHeight, 0.0f, -1.0f, 1.0f);
 
     UINT projSlot = textCBCursor++;
     UINT colorSlot = textCBCursor++;
     uint8_t* cbBase = static_cast<uint8_t*>(textCBData);
-    memcpy(cbBase + projSlot * 256, glm::value_ptr(proj), sizeof(glm::mat4));
+    memcpy(cbBase + projSlot * 256, proj.data(), sizeof(Matrix4));
 
     struct ColorBlock {
         ColorRGBA color;

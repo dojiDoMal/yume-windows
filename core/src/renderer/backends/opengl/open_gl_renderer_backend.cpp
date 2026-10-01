@@ -5,6 +5,7 @@
 #include "../../../components/mesh_renderer.hpp"
 #include "../../../components/sprite_renderer.hpp"
 #include "../../../material.hpp"
+#include "../../../math.hpp"
 #include "../../../stb_image.h"
 #include "mesh_buffer_factory.hpp"
 #include "open_gl_renderer_backend.hpp"
@@ -13,9 +14,6 @@
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <fstream>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <sstream>
 
 GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::OPENGL; }
@@ -102,12 +100,12 @@ bool OpenGLRendererBackend::init() {
 
     glGenBuffers(1, &matricesUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferData(GL_UNIFORM_BUFFER, 4 * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, 4 * sizeof(Matrix4), nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, matricesUBO);
 
     glGenBuffers(1, &materialDataUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, materialDataUBO);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Vector4), nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, materialDataUBO);
 
     glGenBuffers(1, &lightDataUBO);
@@ -174,45 +172,46 @@ void OpenGLRendererBackend::bindCamera(Camera* camera) {
         return;
     }
 
-    glm::mat4 model = glm::mat4(1.0f);
+    Matrix4 model = Matrix4(1.0f);
 
     const auto camPos = cameraObj->getTransform().getPosition();
     const auto camRot = cameraObj->getTransform().getRotation();
 
     // Calcular forward vector da rotação (OpenGL usa Z negativo como forward)
-    glm::vec3 forward;
-    float yawRad = glm::radians(camRot.y);
-    float pitchRad = glm::radians(camRot.x);
+    Vector3 forward;
+    float yawRad = Yume::Math::radians(camRot.y);
+    float pitchRad = Yume::Math::radians(camRot.x);
 
     forward.x = cos(pitchRad) * sin(yawRad);
     forward.y = sin(pitchRad);
     forward.z = cos(pitchRad) * cos(yawRad);
-    forward = glm::normalize(forward);
+    forward = Yume::Math::normalize(forward);
 
     // Em OpenGL, forward padrão é -Z, então invertemos
-    forward = -forward;
+    forward = forward * -1.0f;
 
-    glm::vec3 camPosVec(camPos.x, camPos.y, camPos.z);
-    glm::vec3 target = camPosVec + forward;
+    Vector3 camPosVec{camPos.x, camPos.y, camPos.z};
+    Vector3 target = camPosVec + forward;
 
-    glm::mat4 view = glm::lookAt(camPosVec, target, glm::vec3(0.0f, 1.0f, 0.0f));
+    Matrix4 view = Yume::Math::lookAt(camPosVec, target, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 projection;
+    Matrix4 projection;
     if (camera->isOrthographic()) {
         float orthoSize = camera->getOrthoSize();
         float aspect = camera->getAspectRatio();
-        projection = glm::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
-                                camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
+                              camera->getNearDistance(), camera->getFarDistance());
     } else {
-        projection = glm::perspective(glm::radians(camera->getFov()), camera->getAspectRatio(),
-                                      camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::perspective(Yume::Math::radians(camera->getFov()), camera->getAspectRatio(),
+                                    camera->getNearDistance(), camera->getFarDistance());
     }
 
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
-    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
-    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4),
-                    glm::value_ptr(projection));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(Matrix4), sizeof(Matrix4), view.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(Matrix4), sizeof(Matrix4), projection.data());
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
@@ -297,7 +296,7 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
             mat->applyLight(*lights[0]);
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, instanceSSBO);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, group.models.size() * sizeof(glm::mat4),
+        glBufferData(GL_SHADER_STORAGE_BUFFER, group.models.size() * sizeof(Matrix4),
                      group.models.data(), GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceSSBO);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -320,9 +319,9 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
         auto* mesh = obj->getMesh();
         auto* program = mat->getShaderProgramSingle();
 
-        glm::mat4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getTransform().getModelMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         program->use();
@@ -347,9 +346,9 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
         if (!spriteRenderer || !spriteRenderer->getMaterial())
             continue;
 
-        glm::mat4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getTransform().getModelMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         auto* mat = spriteRenderer->getMaterial();
@@ -405,18 +404,17 @@ void OpenGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
     glDepthFunc(GL_LEQUAL);
 
     const auto camPos = cameraObj->getTransform().getPosition(); // Mudar auto& para const auto
-    glm::mat4 camView = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f));
+    Matrix4 camView =
+        Yume::Math::lookAt({camPos.x, camPos.y, camPos.z}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 view = glm::mat4(glm::mat3(camView));
-    glm::mat4 projection =
-        glm::perspective(glm::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
-                         mainCamera->getNearDistance(), mainCamera->getFarDistance());
+    Matrix4 view = Matrix4(camView.toMatrix3());
+    Matrix4 projection = Yume::Math::perspective(
+        Yume::Math::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
+        mainCamera->getNearDistance(), mainCamera->getFarDistance());
 
-    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE,
-                       glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, view.data());
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE,
-                       glm::value_ptr(projection));
+                       projection.data());
     glUniform1i(glGetUniformLocation(shaderProgram, "skybox"), 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -488,17 +486,17 @@ void OpenGLRendererBackend::drawSprite(const Sprite& sprite) {
 
     // Não sobrescrever a matriz model, apenas aplicar a escala do sprite
     // A matriz model já foi configurada em renderGameObjects com o Transform
-    glm::mat4 spriteScale =
-        glm::scale(glm::mat4(1.0f), glm::vec3(sprite.getWidth(), sprite.getHeight(), 1.0f));
+    Matrix4 spriteScale =
+        Yume::Math::scale(Matrix4(1.0f), {sprite.getWidth(), sprite.getHeight(), 1.0f});
 
-    glm::mat4 currentModel;
+    Matrix4 currentModel;
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glGetBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(currentModel));
+    glGetBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), currentModel.data());
 
     // Multiplicar: transform * escala do sprite
-    glm::mat4 finalModel = currentModel * spriteScale;
+    Matrix4 finalModel = currentModel * spriteScale;
 
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(finalModel));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), finalModel.data());
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -590,7 +588,7 @@ bool OpenGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
 
     glGenBuffers(1, &textUBOProjection);
     glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Matrix4), nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 4, textUBOProjection);
 
     glGenBuffers(1, &textUBOColor);
@@ -637,9 +635,9 @@ void OpenGLRendererBackend::drawText(const std::string& text, float x, float y, 
     glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
     glUseProgram(textShaderProgram);
 
-    glm::mat4 proj = glm::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f);
+    Matrix4 proj = Yume::Math::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f);
     glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(proj));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), proj.data());
 
     float screenPxRange = textAtlas->distanceRange * (scale / textAtlas->atlasSize);
     ColorBlock colorData{color, screenPxRange, {}};

@@ -1,18 +1,23 @@
 #include "shader_program_factory.hpp"
 
-#ifdef PLATFORM_WEBGL
+#ifdef __SWITCH__
+#include "renderer/backends/egl/egl_shader_program.hpp"
+#elif PLATFORM_WEBGL
 #include "renderer/backends/webgl/web_gl_shader_program.hpp"
 #else
 #include "renderer/backends/opengl/open_gl_shader_program.hpp"
 #include "renderer/backends/vulkan/vulkan_shader_program.hpp"
 #ifdef _WIN32
 #include "renderer/backends/directx12/d3d12_shader_program.hpp"
-#endif
-#endif
+#endif // _WIN32
+#endif // __SWITCH__
 
 std::unique_ptr<ShaderProgram> ShaderProgramFactory::create(GraphicsAPI api, void* context) {
     switch (api) {
-#ifdef PLATFORM_WEBGL
+#ifdef __SWITCH__
+    case GraphicsAPI::EGL:
+        return std::make_unique<EGLShaderProgram>();
+#elif PLATFORM_WEBGL
     case GraphicsAPI::WEBGL:
         return std::make_unique<WebGLShaderProgram>();
 #else
@@ -23,8 +28,8 @@ std::unique_ptr<ShaderProgram> ShaderProgramFactory::create(GraphicsAPI api, voi
 #ifdef _WIN32
     case GraphicsAPI::DIRECTX12:
         return std::make_unique<D3D12ShaderProgram>(static_cast<D3D12RendererBackend*>(context));
-#endif
-#endif
+#endif // _WIN32
+#endif // __SWITCH__
     default:
         return nullptr;
     }

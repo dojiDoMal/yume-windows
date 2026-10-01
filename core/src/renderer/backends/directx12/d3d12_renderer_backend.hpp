@@ -1,12 +1,12 @@
 #ifndef D3D12_RENDERER_BACKEND_HPP
 #define D3D12_RENDERER_BACKEND_HPP
 
+#include "../../../matrix4.hpp"
 #include "../../../mesh.hpp"
 #include "../../../world_object.hpp"
 #include "../../renderer_backend.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
 
@@ -42,7 +42,7 @@ class D3D12RendererBackend : public RendererBackend {
     // binds the SRV at its own offset. The cursor resets every frame.
     ID3D12Resource* instanceBuffer = nullptr;
     void* instanceBufferData = nullptr;
-    size_t instanceBufferCapacity = 0; // capacity in number of glm::mat4
+    size_t instanceBufferCapacity = 0; // capacity in number of Matrix4
     size_t instanceBufferCursor = 0;   // next free slot (matrices), per frame
 
     // Instancing groups, mirroring the OpenGL backend: objects sharing the same
@@ -58,7 +58,7 @@ class D3D12RendererBackend : public RendererBackend {
         }
     };
     struct InstanceGroup {
-        std::vector<glm::mat4> models;
+        std::vector<Matrix4> models;
         const Mesh* mesh = nullptr;
         Material* material = nullptr;
     };
@@ -114,7 +114,7 @@ class D3D12RendererBackend : public RendererBackend {
 
     // Appends `count` matrices at the current cursor and returns the GPU
     // virtual address of that region (for SetGraphicsRootShaderResourceView).
-    D3D12_GPU_VIRTUAL_ADDRESS appendInstanceData(const glm::mat4* models, size_t count);
+    D3D12_GPU_VIRTUAL_ADDRESS appendInstanceData(const Matrix4* models, size_t count);
 
     // Resets the text per-frame arenas (vertex + constant buffer cursors).
     void beginTextFrame();

@@ -20,6 +20,21 @@ struct Vector4 {
     Vector4 operator*(const float scalar) const {
         return {x * scalar, y * scalar, z * scalar, w * scalar};
     }
+
+    Vector4 operator/(const float scalar) const {
+        return {x / scalar, y / scalar, z / scalar, w / scalar};
+    }
+
+    Vector4& operator/=(const float scalar) {
+        x /= scalar;
+        y /= scalar;
+        z /= scalar;
+        w /= scalar;
+        return *this;
+    }
+
+    float& operator[](int i) { return v[i]; }
+    const float& operator[](int i) const { return v[i]; }
 };
 
 namespace VECTOR4 {

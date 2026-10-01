@@ -7,10 +7,11 @@
     {
       "name": "sdl2",
       "default-features": false,
-      "features": ["vulkan"]
+      "features": [
+        "vulkan"
+      ]
     },
     "glew",
-    "glm",
     "vulkan",
     "spirv-cross",
     "directx-dxc"

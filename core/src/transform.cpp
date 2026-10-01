@@ -1,16 +1,19 @@
 #include "transform.hpp"
-#include <glm/gtc/matrix_transform.hpp>
+#include "math.hpp"
 
-glm::mat4 Transform::getModelMatrix() const {
+Matrix4 Transform::getModelMatrix() const {
     if (!dirty)
         return cachedMatrix;
 
-    cachedMatrix = glm::mat4(1.0f);
-    cachedMatrix = glm::translate(cachedMatrix, glm::vec3(position.x, position.y, position.z));
-    cachedMatrix = glm::rotate(cachedMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-    cachedMatrix = glm::rotate(cachedMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-    cachedMatrix = glm::rotate(cachedMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-    cachedMatrix = glm::scale(cachedMatrix, glm::vec3(scale.x, scale.y, scale.z));
+    cachedMatrix = Matrix4(1.0f);
+    cachedMatrix = Yume::Math::translate(cachedMatrix, {position.x, position.y, position.z});
+    cachedMatrix =
+        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.x), {1.0f, 0.0f, 0.0f});
+    cachedMatrix =
+        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.y), {0.0f, 1.0f, 0.0f});
+    cachedMatrix =
+        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.z), {0.0f, 0.0f, 1.0f});
+    cachedMatrix = Yume::Math::scale(cachedMatrix, {scale.x, scale.y, scale.z});
     dirty = false;
     return cachedMatrix;
 }

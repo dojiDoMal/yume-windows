@@ -31,7 +31,7 @@ class SceneLoader {
     SceneLoader();
     void setRendererBackend(RendererBackend&);
     bool validateSceneFile(const std::string& filepath);
-    CompiledScene* loadCompiledScene(const std::string& filepath);
+    std::unique_ptr<CompiledScene> loadCompiledScene(const std::string& filepath);
 
     void loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene);
 };

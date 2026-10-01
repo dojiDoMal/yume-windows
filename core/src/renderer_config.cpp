@@ -68,5 +68,25 @@ RendererConfig loadRendererConfig(const std::string& path) {
         LOG_WARN("Config " + path + " has no 'renderer' object - using defaults");
     }
 
+    // Project-level entry scene. Lives at the top level (not under "renderer")
+    // because it is an application property, not a presentation one.
+    if (j.contains("scene") && j["scene"].is_string())
+        config.scene = j["scene"].get<std::string>();
+
+    // Optional window block. Each field is independent and keeps its default
+    // when missing/invalid.
+    if (j.contains("window") && j["window"].is_object()) {
+        const auto& w = j["window"];
+
+        if (w.contains("title") && w["title"].is_string())
+            config.windowTitle = w["title"].get<std::string>();
+
+        if (w.contains("width") && w["width"].is_number_integer())
+            config.windowWidth = w["width"].get<int>();
+
+        if (w.contains("height") && w["height"].is_number_integer())
+            config.windowHeight = w["height"].get<int>();
+    }
+
     return config;
 }

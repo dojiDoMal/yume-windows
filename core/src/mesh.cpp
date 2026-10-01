@@ -1,6 +1,5 @@
 #include "mesh.hpp"
 #include "math.hpp"
-#include <GL/glew.h>
 #include <cmath>
 
 bool Mesh::configure() {

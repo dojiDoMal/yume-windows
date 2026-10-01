@@ -7,6 +7,7 @@
 #include "../../../components/mesh_renderer.hpp"
 #include "../../../font_atlas.hpp"
 #include "../../../material.hpp"
+#include "../../../math.hpp"
 #include "../../../stb_image.h"
 #include "shader_program_factory.hpp"
 #include "vulkan_mesh_buffer.hpp"
@@ -19,9 +20,6 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <set>
 #include <sstream>
 
@@ -669,7 +667,7 @@ bool VulkanRendererBackend::createUniformBuffer() {
         return false;
     }
 
-    VkDeviceSize bufferSize = 4 * sizeof(glm::mat4);
+    VkDeviceSize bufferSize = 4 * sizeof(Matrix4);
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -797,7 +795,7 @@ bool VulkanRendererBackend::createDescriptorPool() {
     VkDescriptorBufferInfo bufferInfos[4] = {};
     bufferInfos[0].buffer = uniformBuffer;
     bufferInfos[0].offset = 0;
-    bufferInfos[0].range = 4 * sizeof(glm::mat4);
+    bufferInfos[0].range = 4 * sizeof(Matrix4);
 
     bufferInfos[1].buffer = materialBuffer;
     bufferInfos[1].offset = 0;
@@ -859,13 +857,13 @@ bool VulkanRendererBackend::createInstanceBuffer() {
     vkGetPhysicalDeviceProperties(physicalDevice, &props);
     instanceAlignment = props.limits.minStorageBufferOffsetAlignment;
     if (instanceAlignment == 0)
-        instanceAlignment = sizeof(glm::mat4);
+        instanceAlignment = sizeof(Matrix4);
 
     instanceBufferCapacity = 1024; // matrices; grows if needed
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = instanceBufferCapacity * sizeof(glm::mat4);
+    bufferInfo.size = instanceBufferCapacity * sizeof(Matrix4);
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -892,23 +890,23 @@ bool VulkanRendererBackend::createInstanceBuffer() {
 
 void VulkanRendererBackend::beginInstanceFrame() { instanceBufferCursor = 0; }
 
-bool VulkanRendererBackend::appendInstanceData(const glm::mat4* models, size_t count,
+bool VulkanRendererBackend::appendInstanceData(const Matrix4* models, size_t count,
                                                uint32_t& outOffset) {
     if (count == 0)
         return false;
 
     // Align the cursor's byte offset to the device's dynamic-offset requirement.
-    size_t byteOffset = instanceBufferCursor * sizeof(glm::mat4);
+    size_t byteOffset = instanceBufferCursor * sizeof(Matrix4);
     size_t alignedByte = (byteOffset + instanceAlignment - 1) & ~(instanceAlignment - 1);
-    size_t alignedSlot = alignedByte / sizeof(glm::mat4);
+    size_t alignedSlot = alignedByte / sizeof(Matrix4);
 
     if (alignedSlot + count > instanceBufferCapacity) {
         LOG_WARN("Instance buffer overflow this frame");
         return false;
     }
 
-    auto* dst = static_cast<glm::mat4*>(instanceBufferMapped) + alignedSlot;
-    memcpy(dst, models, count * sizeof(glm::mat4));
+    auto* dst = static_cast<Matrix4*>(instanceBufferMapped) + alignedSlot;
+    memcpy(dst, models, count * sizeof(Matrix4));
     instanceBufferCursor = alignedSlot + count;
     outOffset = static_cast<uint32_t>(alignedByte);
     return true;
@@ -1023,43 +1021,41 @@ void VulkanRendererBackend::bindCamera(Camera* camera) {
     if (!cameraObj)
         return;
 
-    // Identical camera convention to the OpenGL backend (right-handed, -Z
-    // forward). The one Vulkan-specific fix is flipping the projection Y
-    // (projection[1][1] *= -1), since Vulkan's clip space has +Y pointing down
-    // relative to OpenGL. Depth range [0,1] is Vulkan's default in GLM here.
-    glm::mat4 model = glm::mat4(1.0f);
+    Matrix4 model = Matrix4(1.0f);
 
     const auto camPos = cameraObj->getTransform().getPosition();
     const auto camRot = cameraObj->getTransform().getRotation();
 
-    float yawRad = glm::radians(camRot.y);
-    float pitchRad = glm::radians(camRot.x);
-    glm::vec3 forward;
+    float yawRad = Yume::Math::radians(camRot.y);
+    float pitchRad = Yume::Math::radians(camRot.x);
+    Vector3 forward;
     forward.x = cos(pitchRad) * sin(yawRad);
     forward.y = sin(pitchRad);
     forward.z = cos(pitchRad) * cos(yawRad);
-    forward = glm::normalize(forward);
-    forward = -forward; // match OpenGL's -Z forward
+    forward = Yume::Math::normalize(forward);
+    forward = forward * -1.0f; // match OpenGL's -Z forward
 
-    glm::vec3 camPosVec(camPos.x, camPos.y, camPos.z);
-    glm::mat4 view = glm::lookAt(camPosVec, camPosVec + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+    Vector3 camPosVec{camPos.x, camPos.y, camPos.z};
+    Matrix4 view = Yume::Math::lookAt(camPosVec, camPosVec + forward, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 projection;
+    Matrix4 projection;
     if (camera->isOrthographic()) {
         float orthoSize = camera->getOrthoSize();
         float aspect = camera->getAspectRatio();
-        projection = glm::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
-                                camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
+                              camera->getNearDistance(), camera->getFarDistance());
     } else {
-        projection = glm::perspective(glm::radians(camera->getFov()), camera->getAspectRatio(),
-                                      camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::perspective(Yume::Math::radians(camera->getFov()), camera->getAspectRatio(),
+                                    camera->getNearDistance(), camera->getFarDistance());
     }
     projection[1][1] *= -1; // Vulkan Y flip
 
     struct UniformBufferObject {
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 projection;
+        Matrix4 model;
+        Matrix4 view;
+        Matrix4 projection;
     } ubo{model, view, projection};
 
     void* data;
@@ -1137,7 +1133,7 @@ void VulkanRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
 
     VkCommandBuffer cmd = commandBuffers[currentImageIndex];
 
-    auto drawGroup = [&](const Mesh* mesh, Material* mat, const glm::mat4* models, size_t count) {
+    auto drawGroup = [&](const Mesh* mesh, Material* mat, const Matrix4* models, size_t count) {
         uint32_t instanceOffset = 0;
         if (!appendInstanceData(models, count, instanceOffset))
             return;
@@ -1177,7 +1173,7 @@ void VulkanRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
     for (auto* obj : nonInstancedObjects) {
         auto* meshRenderer = obj->getComponent<MeshRenderer>();
         auto* mat = meshRenderer->getMaterial();
-        glm::mat4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getTransform().getModelMatrix();
         drawGroup(obj->getMesh(), mat, &model, 1);
     }
 }
@@ -1621,7 +1617,7 @@ bool VulkanRendererBackend::initText(const FontAtlas& atlas, unsigned int textur
 
     // Each CB slot holds either the projection (mat4 = 64B) or the color block
     // (vec4 + float). Round the slot up to the alignment.
-    VkDeviceSize slotContent = sizeof(glm::mat4); // 64, larger than color block
+    VkDeviceSize slotContent = sizeof(Matrix4); // 64, larger than color block
     textCBSlotSize = (slotContent + uboAlignment - 1) & ~(uboAlignment - 1);
     textCBSlots = 256; // plenty for many lines/frame (2 slots per drawText)
 
@@ -1684,7 +1680,7 @@ bool VulkanRendererBackend::initText(const FontAtlas& atlas, unsigned int textur
     VkDescriptorBufferInfo projInfo{};
     projInfo.buffer = textCB;
     projInfo.offset = 0;
-    projInfo.range = sizeof(glm::mat4);
+    projInfo.range = sizeof(Matrix4);
     VkDescriptorBufferInfo colorInfo{};
     colorInfo.buffer = textCB;
     colorInfo.offset = 0;
@@ -1780,12 +1776,13 @@ void VulkanRendererBackend::drawText(const std::string& text, float x, float y, 
     // ortho args (bottom=0, top=height) rather than post-multiplying
     // [1][1] *= -1: the latter flips only the scale and leaves the Y
     // translation unchanged, which pushed the text off the top of the screen.
-    glm::mat4 proj = glm::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight, -1.0f, 1.0f);
+    Matrix4 proj =
+        Yume::Math::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight, -1.0f, 1.0f);
 
     uint32_t projSlot = textCBCursor++;
     uint32_t colorSlot = textCBCursor++;
     uint8_t* cbBase = static_cast<uint8_t*>(textCBMapped);
-    memcpy(cbBase + projSlot * textCBSlotSize, glm::value_ptr(proj), sizeof(glm::mat4));
+    memcpy(cbBase + projSlot * textCBSlotSize, proj.data(), sizeof(Matrix4));
 
     struct ColorBlock {
         ColorRGBA color;

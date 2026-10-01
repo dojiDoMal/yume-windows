@@ -24,6 +24,19 @@ struct RendererConfig {
     GraphicsAPI api = GraphicsAPI::OPENGL;
     bool srgb = false;
     bool vsync = true;
+
+    // Initial scene the engine loads at boot, as a compiled-scene filename
+    // resolved relative to the working directory (e.g. "scene.scnb"). This
+    // replaces the hardcoded scene name that used to live in main.cpp, so each
+    // project declares its own entry scene in project.conf. Empty means "no
+    // scene configured" and the engine logs a warning instead of guessing.
+    std::string scene = "scene.scnb";
+
+    // Window properties for the project. Defaults match the historical
+    // hardcoded values in main.cpp (1280x720, title "Engine").
+    std::string windowTitle = "Engine";
+    int windowWidth = 1280;
+    int windowHeight = 720;
 };
 
 // Loads the config from `path` (default "project.conf"). Missing file or any

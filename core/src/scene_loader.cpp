@@ -19,7 +19,6 @@
 #include "stb_image.h"
 #include <fstream>
 
-
 SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
 
 void SceneLoader::setRendererBackend(RendererBackend& backend) { rendererBackend = &backend; }
@@ -78,16 +77,42 @@ void SceneLoader::loadLodGroupComponent(WorldObject* obj, const ComponentData& c
     obj->addComponent(std::move(lodGroup));
 }
 
-CompiledScene* SceneLoader::loadCompiledScene(const std::string& filepath) {
+std::unique_ptr<CompiledScene> SceneLoader::loadCompiledScene(const std::string& filepath) {
     if (!validateSceneFile(filepath))
         return nullptr;
 
     std::ifstream file(filepath, std::ios::binary);
-    auto scene = new CompiledScene();
-    if (!file.read(reinterpret_cast<char*>(scene), sizeof(CompiledScene))) {
-        LOG_ERROR("Failed to read scene file: " + filepath);
-        delete scene;
+
+    // Read the fixed header first, then the variable objects block.
+    SceneHeader header{};
+    if (!file.read(reinterpret_cast<char*>(&header), sizeof(header))) {
+        LOG_ERROR("Failed to read scene header: " + filepath);
         return nullptr;
+    }
+
+    if (header.magic != SCENE_MAGIC) {
+        LOG_ERROR("Bad scene magic (stale or corrupt .scnb?): " + filepath);
+        return nullptr;
+    }
+
+    if (header.worldObjectCount > MAX_WORLD_OBJECTS) {
+        LOG_ERROR("Scene worldObjectCount (" + std::to_string(header.worldObjectCount) +
+                  ") exceeds MAX_WORLD_OBJECTS (" + std::to_string(MAX_WORLD_OBJECTS) +
+                  "): " + filepath);
+        return nullptr;
+    }
+
+    auto scene = std::make_unique<CompiledScene>();
+    scene->worldObjectCount = header.worldObjectCount;
+    scene->worldObjects.resize(header.worldObjectCount);
+
+    if (header.worldObjectCount > 0) {
+        const std::streamsize bytes =
+            static_cast<std::streamsize>(header.worldObjectCount) * sizeof(WorldObjectData);
+        if (!file.read(reinterpret_cast<char*>(scene->worldObjects.data()), bytes)) {
+            LOG_ERROR("Failed to read scene objects (truncated file?): " + filepath);
+            return nullptr;
+        }
     }
 
     LOG_INFO("Loaded scene with " + std::to_string(scene->worldObjectCount) + " world objects");

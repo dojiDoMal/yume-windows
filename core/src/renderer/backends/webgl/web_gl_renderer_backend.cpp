@@ -4,10 +4,8 @@
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <emscripten.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
+#include "math.hpp"
 #include "stb_image.h"
 
 GraphicsAPI WebGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::WEBGL; }
@@ -29,7 +27,7 @@ bool WebGLRendererBackend::init() {
 
     glGenBuffers(1, &matricesUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Matrix4) * 3, nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, matricesUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
@@ -58,33 +56,31 @@ void WebGLRendererBackend::draw(const Mesh& mesh) {
 void WebGLRendererBackend::setUniforms(unsigned int shaderProgram) {
 
     if (!mainCamera) {
-        //printf("Error: mainCamera is null\n");
+        // printf("Error: mainCamera is null\n");
         return;
     }
 
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(1.0f, 0.0f, 1.0f));
-    model = glm::rotate(model, (float)(emscripten_get_now() / 1000.0), glm::vec3(0.5f, 1.0f, 0.0f));
+    Matrix4 model = Yume::Math::rotate(Matrix4(1.0f), 0.0f, {1.0f, 0.0f, 1.0f});
+    model = Yume::Math::rotate(model, (float)(emscripten_get_now() / 1000.0), {0.5f, 1.0f, 0.0f});
 
     auto& camPos = mainCamera->getPosition();
-    //printf("Camera pos: %f, %f, %f\n", camPos.x, camPos.y, camPos.z);
-    glm::mat4 view = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    // printf("Camera pos: %f, %f, %f\n", camPos.x, camPos.y, camPos.z);
+    Matrix4 view =
+        Yume::Math::lookAt({camPos.x, camPos.y, camPos.z}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 projection =
-        glm::perspective(glm::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
-                         mainCamera->getNearDistance(), mainCamera->getFarDistance());
+    Matrix4 projection = Yume::Math::perspective(
+        Yume::Math::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
+        mainCamera->getNearDistance(), mainCamera->getFarDistance());
 
     GLint loc = glGetUniformLocation(shaderProgram, "model");
-    //if (loc == -1)
-        //printf("Uniform 'model' not found\n");
+    // if (loc == -1)
+    // printf("Uniform 'model' not found\n");
 
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
-    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
-    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(projection));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(Matrix4), sizeof(Matrix4), view.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(Matrix4), sizeof(Matrix4), projection.data());
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-    
 }
 
 unsigned int WebGLRendererBackend::createCubemapTexture(const std::vector<std::string>& faces) {
@@ -102,7 +98,7 @@ unsigned int WebGLRendererBackend::createCubemapTexture(const std::vector<std::s
                          GL_UNSIGNED_BYTE, data);
             stbi_image_free(data);
         } else {
-            //printf("Cubemap texture failed to load at path: %s\n", faces[i].c_str());
+            // printf("Cubemap texture failed to load at path: %s\n", faces[i].c_str());
             stbi_image_free(data);
             return 0;
         }
@@ -136,18 +132,18 @@ void WebGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPro
     if (!isValid) {
         GLchar infoLog[512];
         glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        //printf("Shader validation failed: %s\n", infoLog);
+        // printf("Shader validation failed: %s\n", infoLog);
         return;
     }
 
     auto& camPos = mainCamera->getPosition();
-    glm::mat4 camView = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f));
+    Matrix4 camView =
+        Yume::Math::lookAt({camPos.x, camPos.y, camPos.z}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 view = glm::mat4(glm::mat3(camView));
-    glm::mat4 projection =
-        glm::perspective(glm::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
-                         mainCamera->getNearDistance(), mainCamera->getFarDistance());
+    Matrix4 view = Matrix4(camView.toMatrix3());
+    Matrix4 projection = Yume::Math::perspective(
+        Yume::Math::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
+        mainCamera->getNearDistance(), mainCamera->getFarDistance());
 
     GLuint blockIndex = glGetUniformBlockIndex(shaderProgram, "type_Matrices");
     if (blockIndex != GL_INVALID_INDEX) {

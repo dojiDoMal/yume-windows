@@ -4,6 +4,7 @@
 #include <array>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <nlohmann/json.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -177,11 +178,15 @@ void compileLight(ComponentData& compData, const json& comp) {
 
 void compileWorldObjects(CompiledScene& scene, const json& j) {
     scene.worldObjectCount = 0;
+    scene.worldObjects.clear();
     if (!j.contains("worldObjects"))
         return;
 
     auto& worldObjects = j["worldObjects"];
     scene.worldObjectCount = std::min(worldObjects.size(), (size_t)MAX_WORLD_OBJECTS);
+    // Zero-initialize each element so unused component slots / padding are
+    // deterministic (matches the previous value-initialized fixed array).
+    scene.worldObjects.assign(scene.worldObjectCount, WorldObjectData{});
 
     for (size_t i = 0; i < worldObjects.size() && i < MAX_WORLD_OBJECTS; i++) {
         auto& wo = worldObjects[i];
@@ -254,7 +259,21 @@ int main(int argc, char* argv[]) {
     compileWorldObjects(*scene, j);
 
     std::ofstream output(argv[2], std::ios::binary);
-    output.write(reinterpret_cast<char*>(scene.get()), sizeof(CompiledScene));
+    if (!output.is_open()) {
+        std::cerr << "Failed to open output file: " << argv[2] << std::endl;
+        return 1;
+    }
+
+    // Write: [SceneHeader][worldObjectCount x WorldObjectData]. Only the objects
+    // actually present are written, so the file scales with the object count.
+    SceneHeader header{SCENE_MAGIC, scene->worldObjectCount};
+    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+    if (scene->worldObjectCount > 0) {
+        output.write(reinterpret_cast<const char*>(scene->worldObjects.data()),
+                     static_cast<std::streamsize>(scene->worldObjectCount) *
+                         sizeof(WorldObjectData));
+    }
 
     std::cout << "Scene compiled successfully: " << scene->worldObjectCount << " world objects"
               << std::endl;

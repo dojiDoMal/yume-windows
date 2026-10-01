@@ -26,7 +26,7 @@ void SceneManager::loadScene(const std::string& name) {
         return;
 
     // Carregar todos os world objects
-    sceneLoader.loadWorldObjects(activeScene->getObjectManager(), compiledScene);
+    sceneLoader.loadWorldObjects(activeScene->getObjectManager(), compiledScene.get());
 
     // Encontrar e setar a camera principal
     for (auto& obj : activeScene->getObjectManager()->getObjects()) {
@@ -35,8 +35,7 @@ void SceneManager::loadScene(const std::string& name) {
             break;
         }
     }
-
-    delete compiledScene;
+    // compiledScene (unique_ptr) is freed automatically at scope exit.
 }
 
 void SceneManager::setRendererBackend(RendererBackend& rendererBackend) {

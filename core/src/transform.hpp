@@ -1,19 +1,19 @@
 #ifndef TRANSFORM_HPP
 #define TRANSFORM_HPP
 
+#include "matrix4.hpp"
 #include "vector3.hpp"
-#include <glm/glm.hpp>
 
 class Transform {
   private:
     Vector3 position;
     Vector3 rotation;
     Vector3 scale;
-    mutable glm::mat4 cachedMatrix{1.0f};
+    mutable Matrix4 cachedMatrix{1.0f};
     mutable bool dirty = true;
 
   public:
-    glm::mat4 getModelMatrix() const;
+    Matrix4 getModelMatrix() const;
 
     Vector3 getPosition() const;
     void setPosition(const Vector3& pos);

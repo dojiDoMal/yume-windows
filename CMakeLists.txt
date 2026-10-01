@@ -1,232 +1,141 @@
 cmake_minimum_required(VERSION 3.10)
-project(teste LANGUAGES C CXX)
+project(yume LANGUAGES C CXX)
+
+# This CMakeLists can be the top-level project (standalone engine build) OR be
+# pulled in via add_subdirectory() from a project/example. Use
+# CMAKE_CURRENT_SOURCE_DIR (this folder) rather than CMAKE_SOURCE_DIR (the
+# top-level), so engine paths resolve correctly in both cases.
+set(YUME_ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# The devkitPro Switch toolchain sets CMAKE_SYSTEM_NAME to "NintendoSwitch".
+# Use it as the single source of truth for the Switch build path.
+if(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
+    set(IS_SWITCH TRUE)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Encontrar ferramentas de compilação de shaders
-find_program(DXC_EXECUTABLE dxc REQUIRED)
-find_program(SPIRV_CROSS_EXECUTABLE spirv-cross REQUIRED)
-
-if(NOT DXC_EXECUTABLE OR NOT SPIRV_CROSS_EXECUTABLE)
-    message(WARNING "DXC or SPIRV-Cross not found. Shader compilation will be skipped.")
-    set(SKIP_SHADER_COMPILATION TRUE)
+# Default to a Debug build when the caller doesn't specify one, so standalone
+# engine configures still behave like before. Projects pass -DCMAKE_BUILD_TYPE.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
+# -----------------------------------------------------------------------------
+# YUME_DEBUG: compile-time switch for debug-only code (verbose logging, asserts).
+# Defined for Debug builds and absent for Release, so code can gate on
+# #ifdef YUME_DEBUG. Applied as a PUBLIC define on yume_core below so it reaches
+# both the engine and anything that links it (the project executables).
+# -----------------------------------------------------------------------------
+
+# MAX_WORLD_OBJECTS sizes the CompiledScene struct (WorldObjectData[N]). The
+# scene_compiler writes sizeof(CompiledScene) bytes and the engine reads exactly
+# that many back, so BOTH binaries must be built with the SAME value. Keep it a
+# global define so it reaches yume_core AND scene_compiler.
 if(EMSCRIPTEN)
-    include_directories(${CMAKE_SOURCE_DIR}/core/libs)
-    add_compile_definitions(PLATFORM_WEBGL)
     add_compile_definitions(MAX_WORLD_OBJECTS=64)
-    set(CMAKE_EXECUTABLE_SUFFIX ".html")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s NO_DISABLE_EXCEPTION_CATCHING")
-    
-    # Build preload files list
-    set(PRELOAD_FILES 
-        "--preload-file ${CMAKE_SOURCE_DIR}/scene.scnb@scene.scnb"
-        "--preload-file ${CMAKE_SOURCE_DIR}/px.png@px.png"
-        "--preload-file ${CMAKE_SOURCE_DIR}/py.png@py.png"
-        "--preload-file ${CMAKE_SOURCE_DIR}/pz.png@pz.png"
-        "--preload-file ${CMAKE_SOURCE_DIR}/nx.png@nx.png"
-        "--preload-file ${CMAKE_SOURCE_DIR}/ny.png@ny.png"
-        "--preload-file ${CMAKE_SOURCE_DIR}/nz.png@nz.png"
-    )
-    
-    file(GLOB GLSL_SHADERS "${CMAKE_SOURCE_DIR}/*.glsl")
-    foreach(GLSL_FILE ${GLSL_SHADERS})
-        get_filename_component(GLSL_NAME ${GLSL_FILE} NAME)
-        list(APPEND PRELOAD_FILES "--preload-file ${GLSL_FILE}@${GLSL_NAME}")
-    endforeach()
-
-    file(GLOB OBJ_FILES "${CMAKE_SOURCE_DIR}/*.obj")
-    foreach(OBJ_FILE ${OBJ_FILES})
-        get_filename_component(OBJ_NAME ${OBJ_FILE} NAME)
-        list(APPEND PRELOAD_FILES "--preload-file ${OBJ_FILE}@${OBJ_NAME}")
-    endforeach()
-    
-    string(REPLACE ";" " " PRELOAD_FILES_STR "${PRELOAD_FILES}")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_SDL=2 -s USE_WEBGL2=1 -s FULL_ES3=1 -s ALLOW_MEMORY_GROWTH=1 -s ASSERTIONS=2 ${PRELOAD_FILES_STR}")
 else()
-    set(OpenGL_GL_PREFERENCE GLVND)
     add_compile_definitions(MAX_WORLD_OBJECTS=10240)
-    find_package(SDL2 REQUIRED)
-    find_package(GLEW REQUIRED)
-    find_package(glm REQUIRED)
-    find_package(OpenGL REQUIRED)
-    find_package(Vulkan REQUIRED)
 endif()
-
-include_directories(${CMAKE_SOURCE_DIR}/core/src)
-
-# Scene compiler
-if(EMSCRIPTEN)
-    find_program(SCENE_COMPILER_EXE scene_compiler PATHS ${CMAKE_SOURCE_DIR}/tools REQUIRED)
-    set(SCENE_COMPILER_CMD ${SCENE_COMPILER_EXE})
-    set(SCENE_COMPILER_DEPS)
-else()
-    add_executable(scene_compiler core/src/scene_compiler.cpp)
-    set_target_properties(scene_compiler PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/tools)
-    set(SCENE_COMPILER_CMD scene_compiler)
-    set(SCENE_COMPILER_DEPS scene_compiler)
-endif()
-
-file(GLOB SCENE_FILES "${CMAKE_SOURCE_DIR}/*.scn")
-set(COMPILED_SCENES)
-foreach(SCENE_FILE ${SCENE_FILES})
-    get_filename_component(SCENE_NAME ${SCENE_FILE} NAME_WE)
-    set(OUTPUT_FILE "${CMAKE_SOURCE_DIR}/${SCENE_NAME}.scnb")
-    add_custom_command(
-        OUTPUT ${OUTPUT_FILE}
-        COMMAND ${SCENE_COMPILER_CMD} ${SCENE_FILE} ${OUTPUT_FILE}
-        DEPENDS ${SCENE_COMPILER_DEPS} ${SCENE_FILE}
-        COMMENT "Compiling ${SCENE_NAME}.scn -> ${SCENE_NAME}.scnb"
-    )
-    list(APPEND COMPILED_SCENES ${OUTPUT_FILE})
-endforeach()
-add_custom_target(compile_scenes ALL DEPENDS ${COMPILED_SCENES})
-
-# Main executable
-file(GLOB_RECURSE SOURCES "core/src/*.cpp")
-list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/core/src/scene_compiler.cpp")
-
-if(NOT EMSCRIPTEN)
-    file(GLOB WEBGL_RENDERER_FILES "${CMAKE_SOURCE_DIR}/core/src/renderer/backends/webgl/*")
-    list(REMOVE_ITEM SOURCES ${WEBGL_RENDERER_FILES})
-endif()
-
-if(EMSCRIPTEN)
-    file(GLOB OPENGL_RENDERER_FILES "${CMAKE_SOURCE_DIR}/core/src/renderer/backends/opengl/*")
-    list(REMOVE_ITEM SOURCES ${OPENGL_RENDERER_FILES})
-    file(GLOB VULKAN_RENDERER_FILES "${CMAKE_SOURCE_DIR}/core/src/renderer/backends/vulkan/*")
-    list(REMOVE_ITEM SOURCES ${VULKAN_RENDERER_FILES})
-    file(GLOB DX12_RENDERER_FILES "${CMAKE_SOURCE_DIR}/core/src/renderer/backends/directx12/*")
-    list(REMOVE_ITEM SOURCES ${DX12_RENDERER_FILES})
-endif()
-
-add_executable(main ${SOURCES})
-
-if(NOT EMSCRIPTEN)
-    target_link_libraries(main 
-        $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
-        $<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
-        GLEW::GLEW
-        glm::glm
-        OpenGL::GL
-        Vulkan::Vulkan
-        d3d12
-        dxgi
-        d3dcompiler
-    )
-endif()
-
-add_dependencies(main Shaders)
-
-# Shader compilation - HLSL to SPIR-V only
-file(GLOB VXS_SHADERS "${CMAKE_SOURCE_DIR}/*.vxs")
-file(GLOB PXS_SHADERS "${CMAKE_SOURCE_DIR}/*.pxs")
-
-if(EMSCRIPTEN)
-    set(SPIRV_CROSS_ARGS --es --version 300)
-else()
-    set(SPIRV_CROSS_ARGS --no-es --version 430 --separate-shader-objects)
-endif()
-
-foreach(SHADER_FILE ${VXS_SHADERS})
-    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
-    set(SPIRV_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.vxs.spv")
-    set(GLSL_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.vxs.glsl")
-
-    add_custom_command(
-        OUTPUT ${SPIRV_FILE}
-        COMMAND ${DXC_EXECUTABLE} -spirv -T vs_6_0 -E main -fvk-t-shift 3 0 ${SHADER_FILE} -Fo ${SPIRV_FILE}
-        DEPENDS ${SHADER_FILE}
-        COMMENT "Compiling ${SHADER_FILE} -> ${SPIRV_FILE}"
-    )
-    
-    if(EMSCRIPTEN)
-        add_custom_command(
-            OUTPUT ${GLSL_FILE}
-            COMMAND ${SPIRV_CROSS_EXECUTABLE} ${SPIRV_CROSS_ARGS} ${SPIRV_FILE} --output ${GLSL_FILE}
-            COMMAND sed -i 's/^out vec3 out_var_/out highp vec3 out_var_/g' ${GLSL_FILE}
-            DEPENDS ${SPIRV_FILE}
-            COMMENT "Converting ${SPIRV_FILE} -> ${GLSL_FILE}"
-        )        
-    else()
-        add_custom_command(
-            OUTPUT ${GLSL_FILE}
-            COMMAND ${SPIRV_CROSS_EXECUTABLE} ${SPIRV_CROSS_ARGS} ${SPIRV_FILE} --output ${GLSL_FILE}
-            DEPENDS ${SPIRV_FILE}
-            COMMENT "Converting ${SPIRV_FILE} -> ${GLSL_FILE}"
-        )
-    endif()
-    
-    list(APPEND GLSL_FILES ${GLSL_FILE})
-endforeach()
-
-foreach(SHADER_FILE ${PXS_SHADERS})
-    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
-    set(SPIRV_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.spv")
-    set(GLSL_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.glsl")
-    
-    # -fvk-s-shift 1 0: shift HLSL sampler registers (s#) by +1 in the SPIR-V so
-    # a separate image (t0 -> binding 0) and its sampler (s0) don't collide on
-    # the same Vulkan binding. text.pxs uses msdfTexture(t0)+msdfSampler(s0);
-    # this puts the sampler at binding 1. Harmless for shaders without samplers
-    # (flat.pxs). Only affects the SPIR-V/Vulkan path, not DXIL or GLSL output.
-    add_custom_command(
-        OUTPUT ${SPIRV_FILE}
-        COMMAND ${DXC_EXECUTABLE} -spirv -T ps_6_0 -E main -fvk-s-shift 1 0 ${SHADER_FILE} -Fo ${SPIRV_FILE}
-        DEPENDS ${SHADER_FILE}
-        COMMENT "Compiling ${SHADER_FILE} -> ${SPIRV_FILE}"
-    )
-    
-    add_custom_command(
-        OUTPUT ${GLSL_FILE}
-        COMMAND ${SPIRV_CROSS_EXECUTABLE} ${SPIRV_CROSS_ARGS} ${SPIRV_FILE} --output ${GLSL_FILE}
-        DEPENDS ${SPIRV_FILE}
-        COMMENT "Converting ${SPIRV_FILE} -> ${GLSL_FILE}"
-    )
-    
-    list(APPEND GLSL_FILES ${GLSL_FILE})
-endforeach()
 
 # -----------------------------------------------------------------------------
-# HLSL -> DXIL (.cso) compilation for the DirectX 12 backend.
+# Reusable build machinery (shader/scene/asset pipeline + yume_add_project).
+# Defines DXC_EXECUTABLE / SPIRV_CROSS_EXECUTABLE and the per-platform shader
+# flavor. Included here so the engine and the examples share one source of truth.
+# -----------------------------------------------------------------------------
+include(${YUME_ENGINE_ROOT}/cmake/YumeProject.cmake)
+
+# -----------------------------------------------------------------------------
+# Scene compiler (host tool: .scn -> .scnb). For cross builds (Emscripten,
+# Switch) it must run on the build machine, so reuse a prebuilt binary from
+# ${YUME_ENGINE_ROOT}/tools; for native builds compile it here. The resulting
+# command/deps are published for yume_compile_scenes() via YUME_SCENE_COMPILER_*.
+# -----------------------------------------------------------------------------
+if(EMSCRIPTEN OR IS_SWITCH)
+    find_program(SCENE_COMPILER_EXE scene_compiler PATHS ${YUME_ENGINE_ROOT}/tools REQUIRED)
+    set(YUME_SCENE_COMPILER_CMD ${SCENE_COMPILER_EXE} CACHE STRING "scene_compiler command" FORCE)
+    set(YUME_SCENE_COMPILER_DEPS "" CACHE STRING "scene_compiler deps" FORCE)
+else()
+    add_executable(scene_compiler ${YUME_ENGINE_ROOT}/core/src/scene_compiler.cpp)
+    # scene_compiler is a standalone host tool (it does not link yume_core), so
+    # it needs the engine source dir on its include path to find bundled headers
+    # like <nlohmann/json.hpp> and "stb_image.h".
+    target_include_directories(scene_compiler PRIVATE ${YUME_ENGINE_ROOT}/core/src)
+    set_target_properties(scene_compiler PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${YUME_ENGINE_ROOT}/tools)
+    set(YUME_SCENE_COMPILER_CMD scene_compiler CACHE STRING "scene_compiler command" FORCE)
+    set(YUME_SCENE_COMPILER_DEPS scene_compiler CACHE STRING "scene_compiler deps" FORCE)
+endif()
+
+# -----------------------------------------------------------------------------
+# yume_core: the engine as a static library.
 #
-# The D3D12 backend expects precompiled DXIL bytecode next to the source HLSL,
-# named "<name>.vxs.cso" / "<name>.pxs.cso" so it matches the runtime path
-# "<vertexShaderPath>" + getShaderExtension() (".cso").
-# This mirrors the existing SPIR-V/GLSL steps: same HLSL source, extra target.
-# Windows-only (dxc emits DXIL) and skipped for the WebGL build.
+# Everything under core/src except scene_compiler.cpp, which is a separate
+# host-tool executable (built above). The engine no longer contains an entry
+# point: each project ships its own main.cpp (see examples/sandbox) and links
+# yume_core.
+#
+# Backends are filtered per platform exactly as before (one backend dir per API;
+# keep only what this build can use).
 # -----------------------------------------------------------------------------
-if(WIN32 AND NOT EMSCRIPTEN)
-    set(CSO_FILES)
+file(GLOB_RECURSE SOURCES "${YUME_ENGINE_ROOT}/core/src/*.cpp")
+list(REMOVE_ITEM SOURCES "${YUME_ENGINE_ROOT}/core/src/scene_compiler.cpp")
 
-    foreach(SHADER_FILE ${VXS_SHADERS})
-        get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
-        set(CSO_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.vxs.cso")
-        add_custom_command(
-            OUTPUT ${CSO_FILE}
-            COMMAND ${DXC_EXECUTABLE} -T vs_6_0 -E main ${SHADER_FILE} -Fo ${CSO_FILE}
-            DEPENDS ${SHADER_FILE}
-            COMMENT "Compiling ${SHADER_FILE} -> ${CSO_FILE} (DXIL)"
-        )
-        list(APPEND CSO_FILES ${CSO_FILE})
+set(BACKENDS_DIR "${YUME_ENGINE_ROOT}/core/src/renderer/backends")
+if(EMSCRIPTEN)
+    foreach(BACKEND opengl vulkan directx12 egl)
+        file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
+        list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
-
-    foreach(SHADER_FILE ${PXS_SHADERS})
-        get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
-        set(CSO_FILE "${CMAKE_SOURCE_DIR}/${SHADER_NAME}.pxs.cso")
-        add_custom_command(
-            OUTPUT ${CSO_FILE}
-            COMMAND ${DXC_EXECUTABLE} -T ps_6_0 -E main ${SHADER_FILE} -Fo ${CSO_FILE}
-            DEPENDS ${SHADER_FILE}
-            COMMENT "Compiling ${SHADER_FILE} -> ${CSO_FILE} (DXIL)"
-        )
-        list(APPEND CSO_FILES ${CSO_FILE})
+elseif(IS_SWITCH)
+    # Switch uses the libnx EGL/GLES backend. The desktop opengl backend pulls
+    # in GLEW (a desktop-only dep), and webgl/vulkan/directx12 don't apply here.
+    foreach(BACKEND webgl vulkan directx12 opengl)
+        file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
+        list(REMOVE_ITEM SOURCES ${_files})
+    endforeach()
+else()
+    foreach(BACKEND webgl egl)
+        file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
+        list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
 endif()
 
-add_custom_target(Shaders ALL DEPENDS ${GLSL_FILES} ${CSO_FILES})
-add_dependencies(main compile_scenes)
+add_library(yume_core STATIC ${SOURCES})
+
+# Consumers (project executables) need the engine headers and the same
+# MAX_WORLD_OBJECTS. Expose include dir publicly; YUME_DEBUG is public so project
+# code can gate on it too.
+target_include_directories(yume_core PUBLIC ${YUME_ENGINE_ROOT}/core/src)
+target_compile_definitions(yume_core PUBLIC $<$<CONFIG:Debug>:YUME_DEBUG>)
+
+# -----------------------------------------------------------------------------
+# Platform-specific dependencies and link line for yume_core. Each file owns one
+# platform and attaches its graphics deps (SDL2/GLEW/Vulkan/d3d12, libnx, etc.)
+# to yume_core as PUBLIC so the final executable inherits them.
+# -----------------------------------------------------------------------------
+if(EMSCRIPTEN)
+    include(${YUME_ENGINE_ROOT}/cmake/Web.cmake)
+elseif(IS_SWITCH)
+    include(${YUME_ENGINE_ROOT}/cmake/Switch.cmake)
+else()
+    include(${YUME_ENGINE_ROOT}/cmake/PC.cmake)
+endif()
+
+# -----------------------------------------------------------------------------
+# Default application.
+#
+# When this CMakeLists is the top-level project (a standalone engine build, e.g.
+# build.bat), also build the sandbox example so there is a runnable executable.
+# When the engine is pulled into another project via add_subdirectory(), the
+# consuming project owns its own executable and we skip this.
+#
+# The guard is one-directional: examples/sandbox only add_subdirectory()'s the
+# engine when `yume_core` is undefined, and here `yume_core` is already defined,
+# so including the sandbox does not re-enter this file.
+# -----------------------------------------------------------------------------
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT TARGET sandbox)
+    add_subdirectory(${YUME_ENGINE_ROOT}/examples/sandbox ${CMAKE_BINARY_DIR}/examples/sandbox)
+endif()

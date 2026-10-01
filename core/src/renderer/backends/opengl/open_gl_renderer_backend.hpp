@@ -2,6 +2,7 @@
 #define OPEN_GL_RENDERER_BACKEND_HPP
 
 #include "../../../graphics_api.hpp"
+#include "../../../matrix4.hpp"
 #include "../../../mesh.hpp"
 #include "../../../world_object.hpp"
 #include "../../renderer_backend.hpp"
@@ -42,7 +43,7 @@ class OpenGLRendererBackend : public RendererBackend {
         }
     };
     struct InstanceGroup {
-        std::vector<glm::mat4> models;
+        std::vector<Matrix4> models;
         const Mesh* mesh = nullptr;
         Material* material = nullptr;
     };

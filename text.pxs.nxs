@@ -1,0 +1,27 @@
+#version 320 es
+precision mediump float;
+precision highp int;
+
+layout(binding = 5, std140) uniform type_TextColor
+{
+    highp vec4 textColor;
+    highp float distanceRange;
+} TextColor;
+
+uniform highp sampler2D SPIRV_Cross_CombinedmsdfTexturemsdfSampler;
+
+layout(location = 0) in highp vec2 in_var_TEXCOORD0;
+layout(location = 0) out highp vec4 out_var_SV_Target;
+
+void main()
+{
+    highp vec4 _36 = texture(SPIRV_Cross_CombinedmsdfTexturemsdfSampler, in_var_TEXCOORD0);
+    highp float _37 = _36.x;
+    highp float _38 = _36.y;
+    highp float _39 = _36.z;
+    highp float _40 = isnan(_38) ? _37 : (isnan(_37) ? _38 : min(_37, _38));
+    highp float _41 = isnan(_38) ? _37 : (isnan(_37) ? _38 : max(_37, _38));
+    highp float _42 = isnan(_39) ? _41 : (isnan(_41) ? _39 : min(_41, _39));
+    out_var_SV_Target = vec4(TextColor.textColor.xyz, TextColor.textColor.w * clamp((TextColor.distanceRange * ((isnan(_42) ? _40 : (isnan(_40) ? _42 : max(_40, _42))) - 0.5)) + 0.5, 0.0, 1.0));
+}
+

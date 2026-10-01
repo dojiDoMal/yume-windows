@@ -13,6 +13,15 @@
       }
     },
     {
+      "name": "switch",
+      "displayName": "Nintendo Switch Build",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/switch",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "/opt/devkitpro/cmake/Switch.cmake"
+      }
+    },
+    {
       "name": "native",
       "displayName": "Native Build",
       "binaryDir": "${sourceDir}/build/pc"

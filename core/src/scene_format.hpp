@@ -4,6 +4,7 @@
 #include "color.hpp"
 #include "vector3.hpp"
 #include <cstdint>
+#include <vector>
 
 #ifndef MAX_WORLD_OBJECTS
 #define MAX_WORLD_OBJECTS 1024
@@ -145,10 +146,32 @@ struct WorldObjectData {
     ComponentData components[MAX_COMPONENTS_PER_OBJECT];
 };
 
-struct CompiledScene {
-    uint32_t magic = 0x53434E45;
+// -----------------------------------------------------------------------------
+// On-disk scene format.
+//
+// The .scnb file is: [SceneHeader][worldObjectCount x WorldObjectData].
+// Only the objects the scene actually uses are stored, so the file (and the
+// in-RAM buffer) scale with the object count instead of MAX_WORLD_OBJECTS. Each
+// WorldObjectData is still a fixed-size POD (fixed char[] strings, fixed
+// component array), which is what lets the objects be read/written as one block
+// of `count * sizeof(WorldObjectData)` bytes.
+//
+// MAX_WORLD_OBJECTS no longer sizes anything on disk; it survives only as a
+// sanity cap when validating worldObjectCount read from a (possibly corrupt or
+// mismatched) file.
+// -----------------------------------------------------------------------------
+static constexpr uint32_t SCENE_MAGIC = 0x53434E45; // 'SCNE'
+
+struct SceneHeader {
+    uint32_t magic;
     uint32_t worldObjectCount;
-    WorldObjectData worldObjects[MAX_WORLD_OBJECTS];
+};
+
+// In-memory representation. Not bitwise-serializable as a whole (owns a vector);
+// serialize the header and the objects block separately.
+struct CompiledScene {
+    uint32_t worldObjectCount = 0;
+    std::vector<WorldObjectData> worldObjects;
 };
 
 #endif
