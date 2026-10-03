@@ -1,23 +1,16 @@
 #define CLASS_NAME "SceneManager"
-#include "scene_manager.hpp"
 #include "log_macros.hpp"
+
 #include "renderer/renderer_backend.hpp"
 #include "scene_loader.hpp"
-
-
-SceneManager::~SceneManager() {
-    if (activeScene != nullptr) {
-        delete activeScene;
-    }
-}
+#include "scene_manager.hpp"
 
 void SceneManager::addScene(const std::string& name, const std::string& path) {
     sceneRegistry[name] = path;
 }
 
-Scene* SceneManager::getActiveScene() const { return activeScene; }
+Scene* SceneManager::getActiveScene() const { return activeScene.get(); }
 
-// TODO: revisar esse delete
 void SceneManager::loadScene(const std::string& name) {
     auto it = sceneRegistry.find(name);
     if (it == sceneRegistry.end()) {
@@ -25,21 +18,24 @@ void SceneManager::loadScene(const std::string& name) {
         return;
     }
 
-    if (activeScene != nullptr) {
-        delete activeScene;
-    }
-
     activeSceneName = name;
-    activeScene = new Scene();
-    
-    auto compiledScene = sceneLoader.loadCompiledScene(it->second);
-    if (!compiledScene) return;
-    
-    activeScene->setCamera(sceneLoader.loadCamera(compiledScene));
-    activeScene->setLights(sceneLoader.loadLights(compiledScene));
-    activeScene->setGameObjects(sceneLoader.loadGameObjects(compiledScene));
+    activeScene = std::make_unique<Scene>();
 
-    delete compiledScene;
+    auto compiledScene = sceneLoader.loadCompiledScene(it->second);
+    if (!compiledScene)
+        return;
+
+    // Carregar todos os world objects
+    sceneLoader.loadWorldObjects(activeScene->getObjectManager(), compiledScene.get());
+
+    // Encontrar e setar a camera principal
+    for (auto& obj : activeScene->getObjectManager()->getObjects()) {
+        if (obj->hasComponent<Camera>()) {
+            activeScene->setCameraObject(obj.get());
+            break;
+        }
+    }
+    // compiledScene (unique_ptr) is freed automatically at scope exit.
 }
 
 void SceneManager::setRendererBackend(RendererBackend& rendererBackend) {

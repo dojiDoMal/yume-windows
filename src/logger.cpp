@@ -6,7 +6,6 @@
 #include <sstream>
 #include <string>
 
-
 static std::ofstream g_logFile;
 static std::mutex g_logMutex;
 
@@ -26,14 +25,18 @@ static std::string formatDateTime(const char* format) {
 }
 
 void Logger::init(const char* baseName) {
+#ifndef __SWITCH__
     std::string filename =
         "logs/" + std::string(baseName) + "_" + formatDateTime("%Y-%m-%d_%H-%M-%S") + ".log";
     g_logFile.open(filename, std::ios::out | std::ios::app);
+#endif
 }
 
 void Logger::shutdown() {
+#ifndef __SWITCH__
     if (g_logFile.is_open())
         g_logFile.close();
+#endif
 }
 
 void Logger::log(const char* className, const char* methodName, const char* message) {

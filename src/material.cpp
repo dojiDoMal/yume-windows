@@ -2,9 +2,8 @@
 #include "log_macros.hpp"
 
 #include "color.hpp"
-#include "light.hpp"
+#include "components/light.hpp"
 #include "material.hpp"
-
 
 Material::Material() {}
 
@@ -43,13 +42,20 @@ void Material::setBaseColor(const ColorRGBA color) {
     }
 }
 
-void Material::applyLight(const Light light) {
+void Material::applyLight(const Light& light) {
     if (!shaderProgram) {
         LOG_WARN("Can not apply light on material with null shaderProgram");
         return;
     }
 
-    if (light.type == LightType::DIRECTIONAL) {
-        shaderProgram->setUniformBuffer("LightData", &light.direction, sizeof(light.direction));
+    if (light.getType() == LightType::DIRECTIONAL) {
+        struct LightDataBuffer {
+            Vector3 direction;
+            float padding;
+            ColorRGBA color;
+            float intensity;
+        } lightData = {light.getDirection(), 0.0f, light.getColor(), light.getIntensity()};
+
+        shaderProgram->setUniformBuffer("LightData", &lightData, sizeof(lightData));
     }
 }

@@ -14,6 +14,7 @@ class IInput {
     virtual void bindKey(KeyCode key, std::function<void()> callback) = 0;
     virtual bool getQuitEvent() = 0;
     virtual void requestQuit() = 0;
+    virtual bool isKeyPressed(KeyCode key) = 0;
 };
 } // namespace Yume
 

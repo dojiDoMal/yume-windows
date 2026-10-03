@@ -2,9 +2,10 @@
 #include "../../../log_macros.hpp"
 
 #include "../../../color.hpp"
-#include "../../../game_object.hpp"
+#include "../../../components/mesh_renderer.hpp"
+#include "../../../components/sprite_renderer.hpp"
 #include "../../../material.hpp"
-#include "../../../mesh_renderer.hpp"
+#include "../../../math.hpp"
 #include "../../../stb_image.h"
 #include "mesh_buffer_factory.hpp"
 #include "open_gl_renderer_backend.hpp"
@@ -12,21 +13,32 @@
 #include "shader_program_factory.hpp"
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <fstream>
+#include <sstream>
 
 GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::OPENGL; }
 
 std::string OpenGLRendererBackend::getShaderExtension() const { return ".glsl"; }
 
 OpenGLRendererBackend::~OpenGLRendererBackend() {
+    if (instanceSSBO)
+        glDeleteBuffers(1, &instanceSSBO);
     if (matricesUBO)
         glDeleteBuffers(1, &matricesUBO);
     if (materialDataUBO)
         glDeleteBuffers(1, &materialDataUBO);
     if (lightDataUBO)
         glDeleteBuffers(1, &lightDataUBO);
+    if (textShaderProgram)
+        glDeleteProgram(textShaderProgram);
+    if (textVAO)
+        glDeleteVertexArrays(1, &textVAO);
+    if (textVBO)
+        glDeleteBuffers(1, &textVBO);
+    if (textUBOProjection)
+        glDeleteBuffers(1, &textUBOProjection);
+    if (textUBOColor)
+        glDeleteBuffers(1, &textUBOColor);
 }
 
 unsigned int OpenGLRendererBackend::getRequiredWindowFlags() const { return SDL_WINDOW_OPENGL; };
@@ -49,17 +61,24 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
         return false;
     }
 
+    // By default, SDL enables VSync (swap interval = 1),
+    // which caps the FPS to the monitor's refresh rate (60Hz).
     SDL_GLContext glContext = SDL_GL_CreateContext(window);
     if (!glContext) {
         LOG_ERROR("Failed to create OpenGL context!");
         return false;
     }
 
+    // Vsync from project.conf: 1 = cap to refresh rate, 0 = uncapped.
+    SDL_GL_SetSwapInterval(vsyncEnabled ? 1 : 0);
+
     return init();
 };
 
 bool OpenGLRendererBackend::init() {
     GLenum err = glewInit();
+    printf("OpenGL: %s | GPU: %s\n", glGetString(GL_VERSION), glGetString(GL_RENDERER));
+
     if (GLEW_OK != err) {
         std::string glewErr = reinterpret_cast<const char*>(glewGetErrorString(err));
         LOG_ERROR("GLEW initialization failed: " + glewErr);
@@ -70,14 +89,23 @@ bool OpenGLRendererBackend::init() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    // sRGB output from project.conf. When enabled, the default framebuffer
+    // applies a linear->sRGB conversion on write; when disabled (default),
+    // colors are written as-is (historical behavior). Requires an sRGB-capable
+    // default framebuffer, which SDL provides by default.
+    if (srgbEnabled)
+        glEnable(GL_FRAMEBUFFER_SRGB);
+    else
+        glDisable(GL_FRAMEBUFFER_SRGB);
+
     glGenBuffers(1, &matricesUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferData(GL_UNIFORM_BUFFER, 4 * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, 4 * sizeof(Matrix4), nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, matricesUBO);
 
     glGenBuffers(1, &materialDataUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, materialDataUBO);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Vector4), nullptr, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, materialDataUBO);
 
     glGenBuffers(1, &lightDataUBO);
@@ -90,6 +118,11 @@ bool OpenGLRendererBackend::init() {
     uniformBindings["ModelViewProjection"] = matricesUBO;
     uniformBindings["MaterialData"] = materialDataUBO;
     uniformBindings["LightData"] = lightDataUBO;
+
+    glGenBuffers(1, &instanceSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, instanceSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     initSpriteQuad();
 
@@ -106,7 +139,7 @@ void OpenGLRendererBackend::clear(Camera* camera) {
 }
 
 bool OpenGLRendererBackend::initWindowContext() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
@@ -133,30 +166,52 @@ void OpenGLRendererBackend::bindCamera(Camera* camera) {
         return;
     }
 
-    glm::mat4 model = glm::mat4(1.0f);
+    WorldObject* cameraObj = camera->getOwner();
+    if (!cameraObj) {
+        LOG_ERROR("Camera has no owner WorldObject");
+        return;
+    }
 
-    auto& camPos = camera->getPosition();
-    glm::mat4 view = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    Matrix4 model = Matrix4(1.0f);
 
-    glm::mat4 projection;
+    const auto camPos = cameraObj->getTransform().getPosition();
+    const auto camRot = cameraObj->getTransform().getRotation();
+
+    // Calcular forward vector da rotação (OpenGL usa Z negativo como forward)
+    Vector3 forward;
+    float yawRad = Yume::Math::radians(camRot.y);
+    float pitchRad = Yume::Math::radians(camRot.x);
+
+    forward.x = cos(pitchRad) * sin(yawRad);
+    forward.y = sin(pitchRad);
+    forward.z = cos(pitchRad) * cos(yawRad);
+    forward = Yume::Math::normalize(forward);
+
+    // Em OpenGL, forward padrão é -Z, então invertemos
+    forward = forward * -1.0f;
+
+    Vector3 camPosVec{camPos.x, camPos.y, camPos.z};
+    Vector3 target = camPosVec + forward;
+
+    Matrix4 view = Yume::Math::lookAt(camPosVec, target, {0.0f, 1.0f, 0.0f});
+
+    Matrix4 projection;
     if (camera->isOrthographic()) {
         float orthoSize = camera->getOrthoSize();
         float aspect = camera->getAspectRatio();
-        LOG_INFO("Ortho projection - size: " + std::to_string(orthoSize) +
-                 " aspect: " + std::to_string(aspect));
-        projection = glm::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
-                                camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::ortho(-orthoSize * aspect, orthoSize * aspect, -orthoSize, orthoSize,
+                              camera->getNearDistance(), camera->getFarDistance());
     } else {
-        projection = glm::perspective(glm::radians(camera->getFov()), camera->getAspectRatio(),
-                                      camera->getNearDistance(), camera->getFarDistance());
+        projection =
+            Yume::Math::perspective(Yume::Math::radians(camera->getFov()), camera->getAspectRatio(),
+                                    camera->getNearDistance(), camera->getFarDistance());
     }
 
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
-    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
-    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4),
-                    glm::value_ptr(projection));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(Matrix4), sizeof(Matrix4), view.data());
+    glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(Matrix4), sizeof(Matrix4), projection.data());
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
@@ -179,43 +234,127 @@ void OpenGLRendererBackend::applyMaterial(Material* material) {
     setUniforms(program);
 }
 
-void OpenGLRendererBackend::renderGameObjects(std::vector<GameObject*>* gameObjects,
-                                              std::vector<Light>* lights) {
-    for (const auto go : *gameObjects) {
+void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& objects,
+                                               const std::vector<Light*>& lights) {
 
-        glm::mat4 model = glm::mat4(1.0f);
-        if (go->getTransform()) {
-            model = go->getTransform()->getModelMatrix();
+    // Reset per-frame draw statistics. (frustumCulledObjects is set by
+    // Renderer::render before this call, so it is intentionally not reset here.)
+    drawnObjects = 0;
+    drawnVerts = 0;
+    drawnTris = 0;
+
+    nonInstancedObjects.clear();
+    for (auto& [vao, group] : instanceGroups)
+        group.models.clear();
+
+    for (auto* obj : objects) {
+        if (!obj->hasMesh())
+            continue;
+        auto* meshRenderer = obj->getComponent<MeshRenderer>();
+        if (!meshRenderer || !meshRenderer->getMaterial())
+            continue;
+
+        // printf("instancing: %d\n",
+        //        meshRenderer->getMaterial()->isInstancingEnabled()); // adiciona isso
+
+        if (!meshRenderer->getMaterial()->isInstancingEnabled()) {
+            nonInstancedObjects.push_back(obj);
+            continue;
         }
 
+        auto* mesh = obj->getMesh();
+        auto* mat = meshRenderer->getMaterial();
+        auto vao = static_cast<GLuint>(reinterpret_cast<uintptr_t>(mesh->getMeshBufferHandle()));
+        auto shader =
+            static_cast<GLuint>(reinterpret_cast<uintptr_t>(mat->getShaderProgram()->getHandle()));
+        RenderKey key{vao, shader};
+
+        auto& group = instanceGroups[key];
+        if (!group.mesh) {
+            group.mesh = mesh;
+            group.material = mat;
+        }
+        group.models.push_back(obj->getTransform().getModelMatrix());
+    }
+
+    static bool printed = false;
+    if (!printed) {
+        printf("Groups: %zu\n", instanceGroups.size());
+        for (auto& [key, group] : instanceGroups)
+            printf("  VAO %u shader %u: %zu instances\n", key.vao, key.shader, group.models.size());
+        printed = true;
+    }
+
+    // instanced
+    for (auto& [key, group] : instanceGroups) {
+        if (group.models.empty())
+            continue;
+        auto* mat = group.material;
+        mat->use();
+        applyMaterial(mat);
+        if (!lights.empty())
+            mat->applyLight(*lights[0]);
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, instanceSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, group.models.size() * sizeof(Matrix4),
+                     group.models.data(), GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceSSBO);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        glBindVertexArray(key.vao);
+        const GLsizei vertsPerInstance = static_cast<GLsizei>(group.mesh->getVertices().size() / 3);
+        const GLsizei instanceCount = static_cast<GLsizei>(group.models.size());
+        glDrawArraysInstanced(GL_TRIANGLES, 0, vertsPerInstance, instanceCount);
+        glBindVertexArray(0);
+
+        drawnObjects += instanceCount;
+        drawnVerts += static_cast<int>(vertsPerInstance) * instanceCount;
+        drawnTris += static_cast<int>(vertsPerInstance / 3) * instanceCount;
+    }
+
+    // non-instanced — matrix individual via UBO
+    for (auto* obj : nonInstancedObjects) {
+        auto* meshRenderer = obj->getComponent<MeshRenderer>();
+        auto* mat = meshRenderer->getMaterial();
+        auto* mesh = obj->getMesh();
+        auto* program = mat->getShaderProgramSingle();
+
+        Matrix4 model = obj->getTransform().getModelMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(model));
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        if (go->hasSprite() && go->hasSpriteRenderer()) {
-            auto sprite = go->getSprite();
-            auto spriteRenderer = go->getSpriteRenderer();
-            auto mat = spriteRenderer->getMaterial();
+        program->use();
+        if (!lights.empty())
+            mat->applyLight(*lights[0]);
 
-            if (mat) {
-                mat->use();
-                applyMaterial(mat);
-                drawSprite(*sprite);
-            }
-        } else if (go->hasMesh() && go->hasMeshRenderer()) {
-            auto mesh = go->getMesh();
-            auto meshRenderer = go->getMeshRenderer();
-            auto mat = meshRenderer->getMaterial();
+        auto vao = static_cast<GLuint>(reinterpret_cast<uintptr_t>(mesh->getMeshBufferHandle()));
+        const GLsizei vertCount = static_cast<GLsizei>(mesh->getVertices().size() / 3);
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, vertCount);
+        glBindVertexArray(0);
 
-            if (mat) {
-                mat->use();
-                applyMaterial(mat);
-                if (lights && !lights->empty()) {
-                    mat->applyLight((*lights)[0]);
-                }
-                draw(*mesh);
-            }
-        }
+        drawnObjects++;
+        drawnVerts += static_cast<int>(vertCount);
+        drawnTris += static_cast<int>(vertCount / 3);
+    }
+
+    for (auto* obj : objects) {
+        if (!obj->hasSprite())
+            continue;
+        auto* spriteRenderer = obj->getComponent<SpriteRenderer>();
+        if (!spriteRenderer || !spriteRenderer->getMaterial())
+            continue;
+
+        Matrix4 model = obj->getTransform().getModelMatrix();
+        glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        auto* mat = spriteRenderer->getMaterial();
+        mat->use();
+        applyMaterial(mat);
+        drawSprite(*obj->getSprite());
     }
 }
 
@@ -258,21 +397,24 @@ void OpenGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
     if (!mainCamera)
         return;
 
+    WorldObject* cameraObj = mainCamera->getOwner();
+    if (!cameraObj)
+        return;
+
     glDepthFunc(GL_LEQUAL);
 
-    auto& camPos = mainCamera->getPosition();
-    glm::mat4 camView = glm::lookAt({camPos.x, camPos.y, camPos.z}, glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f));
+    const auto camPos = cameraObj->getTransform().getPosition(); // Mudar auto& para const auto
+    Matrix4 camView =
+        Yume::Math::lookAt({camPos.x, camPos.y, camPos.z}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
 
-    glm::mat4 view = glm::mat4(glm::mat3(camView));
-    glm::mat4 projection =
-        glm::perspective(glm::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
-                         mainCamera->getNearDistance(), mainCamera->getFarDistance());
+    Matrix4 view = Matrix4(camView.toMatrix3());
+    Matrix4 projection = Yume::Math::perspective(
+        Yume::Math::radians(mainCamera->getFov()), mainCamera->getAspectRatio(),
+        mainCamera->getNearDistance(), mainCamera->getFarDistance());
 
-    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE,
-                       glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, view.data());
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE,
-                       glm::value_ptr(projection));
+                       projection.data());
     glUniform1i(glGetUniformLocation(shaderProgram, "skybox"), 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -344,17 +486,17 @@ void OpenGLRendererBackend::drawSprite(const Sprite& sprite) {
 
     // Não sobrescrever a matriz model, apenas aplicar a escala do sprite
     // A matriz model já foi configurada em renderGameObjects com o Transform
-    glm::mat4 spriteScale =
-        glm::scale(glm::mat4(1.0f), glm::vec3(sprite.getWidth(), sprite.getHeight(), 1.0f));
+    Matrix4 spriteScale =
+        Yume::Math::scale(Matrix4(1.0f), {sprite.getWidth(), sprite.getHeight(), 1.0f});
 
-    glm::mat4 currentModel;
+    Matrix4 currentModel;
     glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
-    glGetBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(currentModel));
+    glGetBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), currentModel.data());
 
     // Multiplicar: transform * escala do sprite
-    glm::mat4 finalModel = currentModel * spriteScale;
+    Matrix4 finalModel = currentModel * spriteScale;
 
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(finalModel));
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), finalModel.data());
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -377,4 +519,184 @@ void OpenGLRendererBackend::drawSprite(const Sprite& sprite) {
     if (err != GL_NO_ERROR) {
         LOG_ERROR("OpenGL error in drawSprite: " + std::to_string(err));
     }
+}
+
+GLuint OpenGLRendererBackend::compileTextShader(const std::string& path, GLenum type) {
+    std::ifstream file(path);
+    if (!file.is_open())
+        return 0;
+    std::stringstream ss;
+    ss << file.rdbuf();
+    std::string src = ss.str();
+    const char* srcPtr = src.c_str();
+
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &srcPtr, nullptr);
+    glCompileShader(shader);
+
+    GLint ok;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetShaderInfoLog(shader, 512, nullptr, log);
+        printf("TextRenderer shader error: %s\n", log);
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+bool OpenGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
+                                     const std::string& vertPath, const std::string& fragPath) {
+    textAtlas = &atlas;
+    textTextureID = texID;
+
+    GLuint vert = compileTextShader(vertPath, GL_VERTEX_SHADER);
+    GLuint frag = compileTextShader(fragPath, GL_FRAGMENT_SHADER);
+    if (!vert || !frag)
+        return false;
+
+    textShaderProgram = glCreateProgram();
+    glAttachShader(textShaderProgram, vert);
+    glAttachShader(textShaderProgram, frag);
+    glLinkProgram(textShaderProgram);
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+
+    GLint ok;
+    glGetProgramiv(textShaderProgram, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetProgramInfoLog(textShaderProgram, 512, nullptr, log);
+        printf("TextRenderer link error: %s\n", log);
+        return false;
+    }
+
+    GLuint projBlock = glGetUniformBlockIndex(textShaderProgram, "type_TextUniforms");
+    if (projBlock != GL_INVALID_INDEX)
+        glUniformBlockBinding(textShaderProgram, projBlock, 4);
+
+    GLuint colorBlock = glGetUniformBlockIndex(textShaderProgram, "type_TextColor");
+    if (colorBlock != GL_INVALID_INDEX)
+        glUniformBlockBinding(textShaderProgram, colorBlock, 5);
+
+    struct ColorBlock {
+        ColorRGBA color;
+        float distRange;
+        float pad[3];
+    };
+
+    glGenBuffers(1, &textUBOProjection);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Matrix4), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 4, textUBOProjection);
+
+    glGenBuffers(1, &textUBOColor);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOColor);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(ColorBlock), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 5, textUBOColor);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glGenVertexArrays(1, &textVAO);
+    glGenBuffers(1, &textVBO);
+    glBindVertexArray(textVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4 * 512, nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    glBindTexture(GL_TEXTURE_2D, textTextureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return true;
+}
+
+void OpenGLRendererBackend::drawText(const std::string& text, float x, float y, float scale,
+                                     ColorRGBA color, int screenWidth, int screenHeight) {
+    if (!textAtlas || !textShaderProgram)
+        return;
+
+    struct ColorBlock {
+        ColorRGBA color;
+        float distRange;
+        float pad[3];
+    };
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    GLint prevProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    glUseProgram(textShaderProgram);
+
+    Matrix4 proj = Yume::Math::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f);
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOProjection);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), proj.data());
+
+    float screenPxRange = textAtlas->distanceRange * (scale / textAtlas->atlasSize);
+    ColorBlock colorData{color, screenPxRange, {}};
+    glBindBuffer(GL_UNIFORM_BUFFER, textUBOColor);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(ColorBlock), &colorData);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    GLint texLoc =
+        glGetUniformLocation(textShaderProgram, "SPIRV_Cross_CombinedmsdfTexturemsdfSampler");
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textTextureID);
+    if (texLoc != -1)
+        glUniform1i(texLoc, 0);
+
+    glBindVertexArray(textVAO);
+
+    std::vector<float> vertices;
+    vertices.reserve(text.size() * 6 * 4);
+
+    float cursorX = x;
+    uint32_t prevChar = 0;
+    for (char c : text) {
+        uint32_t unicode = (uint32_t)(unsigned char)c;
+        auto it = textAtlas->glyphs.find(unicode);
+        if (it == textAtlas->glyphs.end()) {
+            prevChar = unicode;
+            continue;
+        }
+
+        const GlyphInfo& g = it->second;
+        cursorX += textAtlas->getKerning(prevChar, unicode) * scale;
+
+        if (g.hasGeometry) {
+            float x0 = cursorX + g.planeLeft * scale, x1 = cursorX + g.planeRight * scale;
+            float y0 = y - g.planeTop * scale, y1 = y - g.planeBottom * scale;
+            float u0 = g.atlasLeft / textAtlas->atlasWidth,
+                  u1 = g.atlasRight / textAtlas->atlasWidth;
+            float v0 = 1.0f - (g.atlasBottom / textAtlas->atlasHeight);
+            float v1 = 1.0f - (g.atlasTop / textAtlas->atlasHeight);
+
+            float quad[6][4] = {
+                {x0, y0, u0, v1}, {x0, y1, u0, v0}, {x1, y1, u1, v0},
+                {x0, y0, u0, v1}, {x1, y1, u1, v0}, {x1, y0, u1, v1},
+            };
+            for (auto& v : quad)
+                vertices.insert(vertices.end(), v, v + 4);
+        }
+        cursorX += g.advance * scale;
+        prevChar = unicode;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(),
+                 GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(vertices.size() / 4));
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prevProgram);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }

@@ -1,34 +1,39 @@
 #ifndef SCENE_LOADER_HPP
 #define SCENE_LOADER_HPP
 
-#include "camera.hpp"
-#include "game_object.hpp"
-#include "light.hpp"
+#include "font_atlas.hpp"
+#include "material.hpp"
 #include "mesh.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene_format.hpp"
+#include "world_object.hpp"
+#include "world_object_manager.hpp"
 #include <memory>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 class SceneLoader {
   private:
     RendererBackend* rendererBackend = nullptr;
+    std::unordered_map<std::string, std::shared_ptr<Mesh>> meshCache;
+    std::unordered_map<std::string, std::shared_ptr<Material>> materialCache;
+    std::unordered_map<std::string, std::shared_ptr<FontAtlas>> fontAtlasCache;
 
-    std::unique_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
-    void loadTransformComponent(GameObject* gameObject, const ComponentData& comp);
-    void loadMeshRendererComponent(GameObject* gameObject, const ComponentData& comp);
-    void loadSpriteRendererComponent(GameObject* gameObject, const ComponentData& comp);
+    std::shared_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
+    void loadMeshRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadCameraComponent(WorldObject* obj, const ComponentData& comp);
+    void loadLightComponent(WorldObject* obj, const ComponentData& comp);
+    void loadTextRendererComponent(WorldObject* obj, const ComponentData& comp);
+    void loadLodGroupComponent(WorldObject* obj, const ComponentData& comp);
 
   public:
     SceneLoader();
     void setRendererBackend(RendererBackend&);
     bool validateSceneFile(const std::string& filepath);
-    CompiledScene* loadCompiledScene(const std::string& filepath);
+    std::unique_ptr<CompiledScene> loadCompiledScene(const std::string& filepath);
 
-    Camera* loadCamera(const CompiledScene* scene);
-    std::vector<GameObject*>* loadGameObjects(const CompiledScene* scene);
-    std::vector<Light>* loadLights(const CompiledScene* scene);
+    void loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene);
 };
 
 #endif

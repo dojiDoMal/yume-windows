@@ -4,8 +4,13 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tinyobjloader/tiny_obj_loader.h"
 
+#include "components/camera.hpp"
+#include "components/light.hpp"
+#include "components/lod_group.hpp"
+#include "components/mesh_renderer.hpp"
+#include "components/sprite_renderer.hpp"
+#include "components/text_renderer_component.hpp"
 #include "material.hpp"
-#include "mesh_renderer.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene_format.hpp"
 #include "scene_loader.hpp"
@@ -18,32 +23,103 @@ SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
 
 void SceneLoader::setRendererBackend(RendererBackend& backend) { rendererBackend = &backend; }
 
-CompiledScene* SceneLoader::loadCompiledScene(const std::string& filepath) {
+void SceneLoader::loadLodGroupComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.lodGroup;
+
+    auto& matData = data.material;
+    auto& c = matData.color;
+    std::string matKey = std::string(matData.vertexShaderPath) + "|" + matData.fragmentShaderPath +
+                         "|" + std::to_string(c.r) + std::to_string(c.g) + std::to_string(c.b) +
+                         std::to_string(c.a);
+
+    auto matIt = materialCache.find(matKey);
+    if (matIt == materialCache.end()) {
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto vs =
+            std::make_unique<ShaderAsset>(matData.vertexShaderPath + shaderExt, ShaderType::VERTEX);
+        vs->setShaderCompiler(rendererBackend->createShaderCompiler());
+        auto fs = std::make_unique<ShaderAsset>(matData.fragmentShaderPath + shaderExt,
+                                                ShaderType::FRAGMENT);
+        fs->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto material = std::make_shared<Material>();
+        material->setShaderProgram(rendererBackend->createShaderProgram());
+        material->setVertexShader(std::move(vs));
+        material->setFragmentShader(std::move(fs));
+        material->setBaseColor(matData.color);
+        if (!material->init()) {
+            LOG_ERROR("Material init failed for LOD_GROUP");
+            return;
+        }
+        materialCache[matKey] = material;
+        matIt = materialCache.find(matKey);
+    }
+
+    auto lodGroup = std::make_unique<LodGroup>();
+
+    for (uint8_t i = 0; i < data.levelCount; i++) {
+        auto& lvl = data.levels[i];
+        auto mesh = loadObjMesh(lvl.mesh.path, lvl.mesh.shadeSmooth);
+        if (!mesh) {
+            LOG_ERROR("Failed to load LOD mesh: " + std::string(lvl.mesh.path));
+            return;
+        }
+        lodGroup->addLevel(mesh, lvl.screenSpaceThreshold);
+    }
+
+    // Seta o mesh do LOD0 como mesh inicial do objeto
+    if (data.levelCount > 0)
+        obj->setMesh(loadObjMesh(data.levels[0].mesh.path, data.levels[0].mesh.shadeSmooth));
+
+    auto meshRenderer = std::make_unique<MeshRenderer>();
+    meshRenderer->setMaterial(matIt->second);
+    obj->addComponent(std::move(meshRenderer));
+    obj->addComponent(std::move(lodGroup));
+}
+
+std::unique_ptr<CompiledScene> SceneLoader::loadCompiledScene(const std::string& filepath) {
     if (!validateSceneFile(filepath))
         return nullptr;
 
     std::ifstream file(filepath, std::ios::binary);
-    auto scene = new CompiledScene();
-    if (!file.read(reinterpret_cast<char*>(scene), sizeof(CompiledScene))) {
-        LOG_ERROR("Failed to read scene file: " + filepath);
-        delete scene;
+
+    // Read the fixed header first, then the variable objects block.
+    SceneHeader header{};
+    if (!file.read(reinterpret_cast<char*>(&header), sizeof(header))) {
+        LOG_ERROR("Failed to read scene header: " + filepath);
         return nullptr;
     }
 
-    LOG_INFO("Loaded scene with " + std::to_string(scene->gameObjectCount) + " game objects");
+    if (header.magic != SCENE_MAGIC) {
+        LOG_ERROR("Bad scene magic (stale or corrupt .scnb?): " + filepath);
+        return nullptr;
+    }
 
+    if (header.worldObjectCount > MAX_WORLD_OBJECTS) {
+        LOG_ERROR("Scene worldObjectCount (" + std::to_string(header.worldObjectCount) +
+                  ") exceeds MAX_WORLD_OBJECTS (" + std::to_string(MAX_WORLD_OBJECTS) +
+                  "): " + filepath);
+        return nullptr;
+    }
+
+    auto scene = std::make_unique<CompiledScene>();
+    scene->worldObjectCount = header.worldObjectCount;
+    scene->worldObjects.resize(header.worldObjectCount);
+
+    if (header.worldObjectCount > 0) {
+        const std::streamsize bytes =
+            static_cast<std::streamsize>(header.worldObjectCount) * sizeof(WorldObjectData);
+        if (!file.read(reinterpret_cast<char*>(scene->worldObjects.data()), bytes)) {
+            LOG_ERROR("Failed to read scene objects (truncated file?): " + filepath);
+            return nullptr;
+        }
+    }
+
+    LOG_INFO("Loaded scene with " + std::to_string(scene->worldObjectCount) + " world objects");
     return scene;
 }
 
-void SceneLoader::loadTransformComponent(GameObject* gameObject, const ComponentData& comp) {
-    auto transform = std::make_unique<Transform>();
-    transform->setPosition(comp.transform.position);
-    transform->setRotation(comp.transform.rotation);
-    transform->setScale(comp.transform.scale);
-    gameObject->setTransform(std::move(transform));
-}
-
-void SceneLoader::loadMeshRendererComponent(GameObject* gameObject, const ComponentData& comp) {
+void SceneLoader::loadMeshRendererComponent(WorldObject* obj, const ComponentData& comp) {
     auto& meshData = comp.meshRenderer.mesh;
     auto& materialData = comp.meshRenderer.material;
 
@@ -52,37 +128,47 @@ void SceneLoader::loadMeshRendererComponent(GameObject* gameObject, const Compon
         LOG_ERROR("Failed to load mesh: " + std::string(meshData.path));
         return;
     }
-    mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
-    mesh->configure();
 
-    auto shaderExt = rendererBackend->getShaderExtension();
-    auto vertexShader = std::make_unique<ShaderAsset>(materialData.vertexShaderPath + shaderExt,
-                                                      ShaderType::VERTEX);
-    vertexShader->setShaderCompiler(rendererBackend->createShaderCompiler());
+    // chave única por combinação de shaders + cor
+    auto& c = materialData.color;
+    std::string matKey = std::string(materialData.vertexShaderPath) + "|" +
+                         materialData.fragmentShaderPath + "|" + std::to_string(c.r) +
+                         std::to_string(c.g) + std::to_string(c.b) + std::to_string(c.a);
 
-    auto fragmentShader = std::make_unique<ShaderAsset>(materialData.fragmentShaderPath + shaderExt,
-                                                        ShaderType::FRAGMENT);
-    fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
+    auto matIt = materialCache.find(matKey);
+    if (matIt == materialCache.end()) {
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto vertexShader = std::make_unique<ShaderAsset>(materialData.vertexShaderPath + shaderExt,
+                                                          ShaderType::VERTEX);
+        vertexShader->setShaderCompiler(rendererBackend->createShaderCompiler());
 
-    auto material = std::make_unique<Material>();
-    material->setShaderProgram(rendererBackend->createShaderProgram());
-    material->setVertexShader(std::move(vertexShader));
-    material->setFragmentShader(std::move(fragmentShader));
-    material->setBaseColor(materialData.color);
+        auto fragmentShader = std::make_unique<ShaderAsset>(
+            materialData.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
+        fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
 
-    if (!material->init()) {
-        LOG_ERROR("Material init failed for mesh: " + std::string(meshData.path));
-        return;
+        auto material = std::make_shared<Material>();
+        material->setShaderProgram(rendererBackend->createShaderProgram());
+        material->setVertexShader(std::move(vertexShader));
+        material->setFragmentShader(std::move(fragmentShader));
+        material->setBaseColor(materialData.color);
+
+        if (!material->init()) {
+            LOG_ERROR("Material init failed for mesh: " + std::string(meshData.path));
+            return;
+        }
+
+        materialCache[matKey] = material;
+        matIt = materialCache.find(matKey);
     }
 
     auto meshRenderer = std::make_unique<MeshRenderer>();
-    meshRenderer->setMaterial(std::move(material));
+    meshRenderer->setMaterial(matIt->second); // shared_ptr
 
-    gameObject->setMesh(std::move(mesh));
-    gameObject->setMeshRenderer(std::move(meshRenderer));
+    obj->setMesh(mesh);
+    obj->addComponent(std::move(meshRenderer));
 }
 
-void SceneLoader::loadSpriteRendererComponent(GameObject* gameObject, const ComponentData& comp) {
+void SceneLoader::loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp) {
     auto& textureData = comp.spriteRenderer.texture;
     auto& materialData = comp.spriteRenderer.material;
 
@@ -116,11 +202,100 @@ void SceneLoader::loadSpriteRendererComponent(GameObject* gameObject, const Comp
     auto spriteRenderer = std::make_unique<SpriteRenderer>();
     spriteRenderer->setMaterial(std::move(material));
 
-    gameObject->setSprite(std::move(sprite));
-    gameObject->setSpriteRenderer(std::move(spriteRenderer));
+    obj->setSprite(std::move(sprite));
+    obj->addComponent(std::move(spriteRenderer));
 }
 
-std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
+void SceneLoader::loadCameraComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& camData = comp.camera;
+
+    auto camera = std::make_unique<Camera>();
+    camera->setBackgroundColor(ColorRGBA{camData.background_color[0], camData.background_color[1],
+                                         camData.background_color[2], camData.background_color[3]});
+    camera->setFov(camData.fov);
+    camera->setViewRect(camData.view_rect[0], camData.view_rect[1]);
+    camera->setOrthographic(camData.orthographic);
+    camera->setOrthoSize(camData.orthoSize);
+
+    if (camData.hasSkybox) {
+        auto skybox = std::make_unique<Skybox>();
+
+        auto shaderExt = rendererBackend->getShaderExtension();
+        auto skyboxVertexShaderPtr = std::make_unique<ShaderAsset>(
+            camData.skybox.material.vertexShaderPath + shaderExt, ShaderType::VERTEX);
+        skyboxVertexShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto skyboxFragmentShaderPtr = std::make_unique<ShaderAsset>(
+            camData.skybox.material.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
+        skyboxFragmentShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+
+        auto skyboxMaterial = std::make_unique<Material>();
+        skyboxMaterial->setShaderProgram(rendererBackend->createShaderProgram());
+        skyboxMaterial->setVertexShader(std::move(skyboxVertexShaderPtr));
+        skyboxMaterial->setFragmentShader(std::move(skyboxFragmentShaderPtr));
+        skyboxMaterial->init();
+
+        std::vector<std::string> faces;
+        for (const auto& row : camData.skybox.cubeMapTextures) {
+            faces.push_back(row);
+        }
+
+        unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
+        skybox->setTextureID(cubemapID);
+        skybox->setMaterial(std::move(skyboxMaterial));
+        skybox->init();
+        camera->setSkybox(std::move(skybox));
+    }
+
+    obj->addComponent(std::move(camera));
+}
+
+void SceneLoader::loadTextRendererComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.textRenderer;
+
+    auto it = fontAtlasCache.find(data.font.atlasJsonPath);
+    if (it == fontAtlasCache.end()) {
+        auto atlas = std::make_shared<FontAtlas>();
+        if (!atlas->load(data.font.atlasJsonPath)) {
+            LOG_ERROR("Failed to load font atlas: " + std::string(data.font.atlasJsonPath));
+            return;
+        }
+        fontAtlasCache[data.font.atlasJsonPath] = atlas;
+        it = fontAtlasCache.find(data.font.atlasJsonPath);
+    }
+
+    unsigned int texID = rendererBackend->loadTexture(data.font.texturePath, 1);
+
+    auto shaderExt = rendererBackend->getShaderExtension();
+    auto textRenderer = std::make_unique<TextRenderer>();
+    textRenderer->init(*rendererBackend, *it->second, texID,
+                       std::string(data.material.vertexShaderPath) + shaderExt,
+                       std::string(data.material.fragmentShaderPath) + shaderExt);
+
+    auto component = std::make_unique<TextRendererComponent>();
+    component->setFontAtlas(std::make_unique<FontAtlas>(*it->second));
+    component->setTextRenderer(std::move(textRenderer));
+    obj->addComponent(std::move(component));
+}
+
+void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& lightData = comp.light;
+
+    auto light = std::make_unique<Light>();
+    light->setType(static_cast<LightType>(lightData.lightType));
+    light->setDirection(lightData.direction);
+    light->setColor(
+        ColorRGBA{lightData.color[0], lightData.color[1], lightData.color[2], lightData.color[3]});
+    light->setIntensity(lightData.intensity);
+
+    obj->addComponent(std::move(light));
+}
+
+std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
+    auto it = meshCache.find(filepath);
+    if (it != meshCache.end())
+        return it->second;
+
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -135,7 +310,6 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
     std::vector<float> normals;
 
     if (shadeSmooth && !attrib.normals.empty()) {
-        // Usar normais do arquivo (smooth)
         for (const auto& shape : shapes) {
             for (const auto& index : shape.mesh.indices) {
                 vertices.push_back(attrib.vertices[3 * index.vertex_index + 0]);
@@ -150,10 +324,8 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
             }
         }
     } else {
-        // Calcular normais flat (por face)
         for (const auto& shape : shapes) {
             for (size_t f = 0; f < shape.mesh.indices.size(); f += 3) {
-                // Pegar 3 vértices do triângulo
                 auto& i0 = shape.mesh.indices[f + 0];
                 auto& i1 = shape.mesh.indices[f + 1];
                 auto& i2 = shape.mesh.indices[f + 2];
@@ -168,14 +340,12 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
                                attrib.vertices[3 * i2.vertex_index + 1],
                                attrib.vertices[3 * i2.vertex_index + 2]};
 
-                // Calcular normal da face
                 float edge1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
                 float edge2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
                 float normal[3] = {edge1[1] * edge2[2] - edge1[2] * edge2[1],
                                    edge1[2] * edge2[0] - edge1[0] * edge2[2],
                                    edge1[0] * edge2[1] - edge1[1] * edge2[0]};
 
-                // Normalizar
                 float len =
                     sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
                 if (len > 0) {
@@ -184,7 +354,6 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
                     normal[2] /= len;
                 }
 
-                // Adicionar vértices e mesma normal para os 3 vértices
                 for (int i = 0; i < 3; i++) {
                     auto& idx = shape.mesh.indices[f + i];
                     vertices.push_back(attrib.vertices[3 * idx.vertex_index + 0]);
@@ -198,101 +367,72 @@ std::unique_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
         }
     }
 
-    auto mesh = std::make_unique<Mesh>();
+    auto mesh = std::make_shared<Mesh>();
     mesh->setVertices(vertices);
     mesh->setNormals(normals);
+    mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
+    mesh->configure();
+
+    mesh->setUniqueVertexCount((int)vertices.size() / 3);
+    int totalTris = 0;
+    for (const auto& shape : shapes)
+        totalTris += (int)shape.mesh.indices.size() / 3;
+    mesh->setTriangleCount(totalTris);
+
+    meshCache[filepath] = mesh;
     return mesh;
 }
 
-Camera* SceneLoader::loadCamera(const CompiledScene* scene) {
+void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene) {
+    LOG_INFO("Loading " + std::to_string(scene->worldObjectCount) + " world objects");
 
-    auto camera = new Camera();
-    auto& cam = scene->camera;
+    for (uint32_t i = 0; i < scene->worldObjectCount; i++) {
+        auto& woData = scene->worldObjects[i];
+        auto* obj = manager->createObject();
 
-    camera->setBackgroundColor({cam.background_color[0], cam.background_color[1],
-                                cam.background_color[2], cam.background_color[3]});
-    camera->setFov(cam.fov);
-    camera->setViewRect(cam.view_rect[0], cam.view_rect[1]);
-    camera->setPosition({(float)cam.position[0], (float)cam.position[1], (float)cam.position[2]});
-    
-    camera->setOrthographic(cam.orthographic);
-    camera->setOrthoSize(cam.orthoSize);
-    LOG_INFO("Camera orthoSize loaded: " + std::to_string(cam.orthoSize));
+        // Carregar transform
+        obj->getTransform().setPosition(woData.position);
+        obj->getTransform().setRotation(woData.rotation);
+        obj->getTransform().setScale(woData.scale);
 
-    if (cam.hasSkybox) {
-        auto skybox = std::make_unique<Skybox>();
+        LOG_INFO("WorldObject #" + std::to_string(i) + " - Pos: (" +
+                 std::to_string(woData.position.x) + ", " + std::to_string(woData.position.y) +
+                 ", " + std::to_string(woData.position.z) + ")");
 
-        auto shaderExt = rendererBackend->getShaderExtension();
-        auto skyboxVertexShaderPtr = std::make_unique<ShaderAsset>(
-            cam.skybox.material.vertexShaderPath + shaderExt, ShaderType::VERTEX);
-        skyboxVertexShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
+        // Carregar componentes
+        for (uint8_t j = 0; j < woData.componentCount; j++) {
+            auto& comp = woData.components[j];
 
-        auto skyboxFragmentShaderPtr = std::make_unique<ShaderAsset>(
-            cam.skybox.material.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
-        skyboxFragmentShaderPtr->setShaderCompiler(rendererBackend->createShaderCompiler());
-
-        auto skyboxMaterial = std::make_unique<Material>();
-        skyboxMaterial->setShaderProgram(rendererBackend->createShaderProgram());
-        skyboxMaterial->setVertexShader(std::move(skyboxVertexShaderPtr));
-        skyboxMaterial->setFragmentShader(std::move(skyboxFragmentShaderPtr));
-        skyboxMaterial->init();
-
-        std::vector<std::string> faces;
-        for (const auto row : cam.skybox.cubeMapTextures) {
-            faces.push_back(row);
-        }
-
-        unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
-        skybox->setTextureID(cubemapID);
-        skybox->setMaterial(std::move(skyboxMaterial));
-        skybox->init();
-        camera->setSkybox(std::move(skybox));
-    }
-
-    return camera;
-}
-
-std::vector<GameObject*>* SceneLoader::loadGameObjects(const CompiledScene* scene) {
-
-    auto objects = new std::vector<GameObject*>();
-
-    LOG_INFO("Loading " + std::to_string(scene->gameObjectCount) + " game objects");
-
-    for (uint32_t i = 0; i < scene->gameObjectCount; i++) {
-        auto& goData = scene->gameObjects[i];
-        auto gameObject = new GameObject();
-
-        for (uint8_t j = 0; j < goData.componentCount; j++) {
-            auto& comp = goData.components[j];
-
-            if (comp.type == ComponentType::MESH_RENDERER) {
-                LOG_INFO("Loading mesh renderer component");
-                loadMeshRendererComponent(gameObject, comp);
-            } else if (comp.type == ComponentType::TRANSFORM) {
-                loadTransformComponent(gameObject, comp);
-            } else if (comp.type == ComponentType::SPRITE_RENDERER) {
-                loadSpriteRendererComponent(gameObject, comp);
+            switch (comp.type) {
+            case ComponentType::MESH_RENDERER:
+                LOG_INFO("  - Loading MESH_RENDERER component");
+                loadMeshRendererComponent(obj, comp);
+                break;
+            case ComponentType::SPRITE_RENDERER:
+                LOG_INFO("  - Loading SPRITE_RENDERER component");
+                loadSpriteRendererComponent(obj, comp);
+                break;
+            case ComponentType::CAMERA:
+                LOG_INFO("  - Loading CAMERA component");
+                loadCameraComponent(obj, comp);
+                break;
+            case ComponentType::LIGHT:
+                LOG_INFO("  - Loading LIGHT component");
+                loadLightComponent(obj, comp);
+                break;
+            case ComponentType::TEXT_RENDERER:
+                LOG_INFO("  - Loading TEXT_RENDERER component");
+                loadTextRendererComponent(obj, comp);
+                break;
+            case ComponentType::LOD_GROUP:
+                LOG_INFO("  - Loading LOD_GROUP component");
+                loadLodGroupComponent(obj, comp);
+                break;
+            default:
+                break;
             }
         }
-
-        objects->push_back(gameObject);
     }
-
-    return objects;
-}
-
-std::vector<Light>* SceneLoader::loadLights(const CompiledScene* scene) {
-
-    auto lights = new std::vector<Light>();
-
-    for (uint32_t i = 0; i < scene->lightCount; i++) {
-        Light light;
-        light.type = static_cast<LightType>(scene->lights[i].type);
-        light.direction = scene->lights[i].direction;
-        lights->push_back(light);
-    }
-
-    return lights;
 }
 
 bool SceneLoader::validateSceneFile(const std::string& filepath) {

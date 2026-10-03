@@ -2,6 +2,7 @@
 #define MESH_HPP
 
 #include "mesh_buffer.hpp"
+#include "vector3.hpp"
 #include <memory>
 #include <vector>
 
@@ -10,6 +11,16 @@ class Mesh {
     std::vector<float> vertices;
     std::vector<float> normals;
     std::unique_ptr<MeshBuffer> meshBuffer;
+    int uniqueVertexCount = 0;
+    int triangleCount = 0;
+
+    // Local-space bounding sphere, computed once from the vertices.
+    // Used by frustum culling so we don't rescan vertices every frame.
+    Vector3 boundingCenter{0.0f, 0.0f, 0.0f};
+    float boundingRadius = 0.0f;
+    bool boundsComputed = false;
+
+    void computeBounds();
 
   public:
     Mesh() = default;
@@ -23,12 +34,22 @@ class Mesh {
     void bind();
     void unbind();
 
+    // Local-space bounding sphere accessors (valid after configure()/setVertices()).
+    const Vector3& getBoundingCenter() const { return boundingCenter; }
+    float getBoundingRadius() const { return boundingRadius; }
+    bool hasBounds() const { return boundsComputed; }
+
     void* getHandle() const;
     void* getMeshHandle() const;
     void* getMeshBufferHandle() const;
 
     MeshBuffer* getMeshBuffer() const;
     void setMeshBuffer(std::unique_ptr<MeshBuffer> buffer);
+
+    int getUniqueVertexCount() const { return uniqueVertexCount; }
+    void setUniqueVertexCount(int v) { uniqueVertexCount = v; }
+    int getTriangleCount() const { return triangleCount; }
+    void setTriangleCount(int t) { triangleCount = t; }
 };
 
 #endif // MESH_HPP
