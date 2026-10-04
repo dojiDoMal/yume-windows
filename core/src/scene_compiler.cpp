@@ -1,3 +1,15 @@
+/**
+ * @file scene_compiler.cpp
+ * @brief Ferramenta que compila uma cena de JSON para o formato binário .scnb.
+ *
+ * Faz o caminho inverso do SceneLoader: lê a descrição textual da cena (JSON),
+ * preenche as structs POD de scene_format.hpp (objetos, materiais, luzes,
+ * câmeras, grupos de LOD, etc.) e grava o resultado como um arquivo binário
+ * compacto que o engine carrega em tempo de execução. As funções @c compile*
+ * convertem cada tipo de componente do JSON para seu ComponentData.
+ *
+ * @see scene_format.hpp, SceneLoader
+ */
 #include "color.hpp"
 #include "scene_format.hpp"
 #include "vector3.hpp"

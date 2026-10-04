@@ -35,10 +35,19 @@ include_guard(GLOBAL)
 # HOST_SPIRV_CROSS (settable via -D... on the configure line), falling back to
 # the matching environment variables.
 # -----------------------------------------------------------------------------
+# CACHE (not a plain set) for the same reason the shader-flavor vars below are
+# cached: this file has include_guard(GLOBAL). When a project pulls the engine
+# in via add_subdirectory() and THEN include()s this file again, the second
+# include is a no-op, so a plain set() here would only live in the engine's
+# subdirectory scope -- leaving YUME_IS_SWITCH UNDEFINED in the project scope
+# where yume_add_project() actually runs. That made the Switch-only branch
+# (romfs staging + the main_nro / elf2nro packing target) silently not fire, so
+# `cmake --build ... --target main_nro` failed with "No rule to make target".
+# Caching makes the value survive across scopes and the include guard.
 if(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
-    set(YUME_IS_SWITCH TRUE)
+    set(YUME_IS_SWITCH TRUE CACHE BOOL "Building for Nintendo Switch" FORCE)
 else()
-    set(YUME_IS_SWITCH FALSE)
+    set(YUME_IS_SWITCH FALSE CACHE BOOL "Building for Nintendo Switch" FORCE)
 endif()
 
 if(YUME_IS_SWITCH)
@@ -285,6 +294,63 @@ function(yume_add_project TARGET)
     add_custom_target(${TARGET}_assets ALL
         DEPENDS ${_shader_outputs} ${_scene_outputs} ${_asset_outputs})
     add_dependencies(${TARGET}_assets ${TARGET})
+
+    # -------------------------------------------------------------------------
+    # Windows desktop: deploy the runtime DLLs next to the executable.
+    #
+    # The graphics deps (SDL2, GLEW, Vulkan) are linked PUBLIC onto yume_core,
+    # but yume_core is a STATIC lib, so vcpkg's app-local deploy
+    # (VCPKG_APPLOCAL_DEPS) can't reliably trace the transitive DLLs through it
+    # and copies them inconsistently (only vulkan-1.dll shows up). Without
+    # SDL2.dll / glew32.dll beside main.exe the program fails to start.
+    #
+    # Copy every DLL from the vcpkg triplet's bin dir next to the executable.
+    # This also brings dxcompiler.dll / dxil.dll along, which the D3D12 backend
+    # needs. Desktop + Windows only; Web/Switch don't use vcpkg DLLs.
+    if(WIN32 AND NOT EMSCRIPTEN AND NOT YUME_IS_SWITCH)
+        if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+            # Pick the DLL flavor that matches the build config. A Debug build
+            # links the debug import libs, which load the debug-suffixed DLLs
+            # (SDL2d.dll, glew32d.dll) living in <triplet>/debug/bin; Release
+            # uses the plain names in <triplet>/bin. Copying the wrong flavor
+            # leaves the loader hunting for SDL2d.dll/glew32d.dll it can't find.
+            #
+            # Don't trust CMAKE_BUILD_TYPE alone: when this project is the
+            # top-level CMake build, build.bat may leave it empty in the cache
+            # (the engine's default only applies in the engine's own scope). So
+            # treat "anything that isn't an explicit release config" as debug,
+            # and fall back to whichever bin dir actually exists.
+            set(_vcpkg_root "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+            string(TOLOWER "${CMAKE_BUILD_TYPE}" _cfg_lower)
+            if(_cfg_lower STREQUAL "release"
+                    OR _cfg_lower STREQUAL "relwithdebinfo"
+                    OR _cfg_lower STREQUAL "minsizerel")
+                set(_vcpkg_bin "${_vcpkg_root}/bin")
+            else()
+                # Debug (or unset): prefer the debug DLLs if vcpkg built them.
+                if(EXISTS "${_vcpkg_root}/debug/bin")
+                    set(_vcpkg_bin "${_vcpkg_root}/debug/bin")
+                else()
+                    set(_vcpkg_bin "${_vcpkg_root}/bin")
+                endif()
+            endif()
+            if(EXISTS "${_vcpkg_bin}")
+                file(GLOB _runtime_dlls "${_vcpkg_bin}/*.dll")
+                add_custom_command(TARGET ${TARGET} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_runtime_dlls} "${_out_dir}"
+                    COMMAND_EXPAND_LISTS
+                    COMMENT "Deploying vcpkg runtime DLLs (${CMAKE_BUILD_TYPE}) next to ${TARGET}")
+            else()
+                message(WARNING
+                    "yume_add_project(${TARGET}): vcpkg bin dir '${_vcpkg_bin}' not found; "
+                    "runtime DLLs (SDL2/GLEW/...) will not be deployed next to the executable.")
+            endif()
+        else()
+            message(WARNING
+                "yume_add_project(${TARGET}): VCPKG_INSTALLED_DIR / VCPKG_TARGET_TRIPLET "
+                "unset; cannot deploy runtime DLLs next to the executable.")
+        endif()
+    endif()
 
     # -------------------------------------------------------------------------
     # Switch: turn the linked ELF + the romfs staging dir into a runnable .nro.

@@ -1,3 +1,13 @@
+/**
+ * @file log_macros.hpp
+ * @brief Macros de logging e integração de saída com nxlink no Switch.
+ *
+ * Forneça @c CLASS_NAME antes de incluir e use LOG_INFO/LOG_WARN/LOG_ERROR para
+ * registrar mensagens: no desktop elas chamam Logger::log (incluindo classe e
+ * método), e no Switch são redirecionadas para TRACE/printf. Quando
+ * @c ENABLE_NXLINK está definido, a saída padrão é enviada a um servidor nxlink
+ * para depuração remota.
+ */
 #ifndef LOGGER_MACROS_HPP
 #define LOGGER_MACROS_HPP
 
@@ -11,6 +21,7 @@
 #include <switch.h>
 #include <unistd.h>
 
+/// @brief Imprime uma mensagem formatada com o nome da função (apenas no Switch/nxlink).
 #define TRACE(fmt, ...) printf("%s: " fmt "\n", __PRETTY_FUNCTION__, ##__VA_ARGS__)
 
 static int s_nxlinkSock = -1;
@@ -42,10 +53,13 @@ extern "C" void userAppExit() { deinitNxLink(); }
 
 #ifdef __SWITCH__
 
+/// @brief Registra uma mensagem de informação.
 #define LOG_INFO(msg) TRACE("[INFO] %s", (std::string(msg)).c_str())
 
+/// @brief Registra uma mensagem de aviso.
 #define LOG_WARN(msg) TRACE("[WARN] %s", (std::string(msg)).c_str())
 
+/// @brief Registra uma mensagem de erro.
 #define LOG_ERROR(msg) TRACE("[ERROR] %s", (std::string(msg)).c_str())
 
 #else

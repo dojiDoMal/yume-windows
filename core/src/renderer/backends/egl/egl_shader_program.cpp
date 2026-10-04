@@ -32,7 +32,7 @@ bool EGLShaderProgram::link() {
     if (success == GL_FALSE) {
         char infoLog[512];
         glGetProgramInfoLog(programID, sizeof(infoLog), nullptr, infoLog);
-        LOG_INFO("Link error: %s", infoLog);
+        LOG_INFO(std::string("Link error: ") + infoLog);
         return false;
     }
 
@@ -48,14 +48,14 @@ void EGLShaderProgram::use() { glUseProgram(programID); }
 void EGLShaderProgram::setUniformBuffer(const char* name, const void* data, size_t size) {
     auto it = uniformBindings.find(name);
     if (it == uniformBindings.end()) {
-        LOG_INFO("[WARN] Uniform binding for %s not found!", name);
+        LOG_WARN(std::string("Uniform binding for ") + name + " not found!");
         return;
     }
 
     // Spirv-cross prefixes uniforms with 'type_'
     GLuint blockIndex = glGetUniformBlockIndex(programID, ("type_" + std::string(name)).c_str());
     if (blockIndex == GL_INVALID_INDEX) {
-        LOG_INFO("[WARN] Uniform block index for %s not found!", name);
+        LOG_WARN(std::string("Uniform block index for ") + name + " not found!");
         return;
     }
 

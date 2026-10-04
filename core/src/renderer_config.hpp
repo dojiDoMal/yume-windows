@@ -4,44 +4,51 @@
 #include "graphics_api.hpp"
 #include <string>
 
-// Project-level renderer configuration, loaded once at boot from a JSON file
-// (project.conf). It centralizes presentation decisions that are properties of
-// the engine/application rather than of any single scene.
-//
-// Fields:
-//  - api:   which graphics backend to create (replaces the hardcoded value in
-//           main.cpp).
-//  - srgb:  false (default) = linear/UNORM swapchain/framebuffer, matching the
-//           current behavior across all backends (colors written as-is).
-//           true = sRGB swapchain/framebuffer, so the GPU applies a
-//           linear->sRGB conversion on write. NOTE (phase 2): this only changes
-//           the OUTPUT color space; it does NOT reinterpret input colors from
-//           the .scn or textures as sRGB. Gamma-correct input handling is a
-//           separate, not-yet-implemented step.
-//  - vsync: true (default) = cap to the display refresh (GL swap interval 1 /
-//           Vulkan FIFO / D3D12 Present(1)). false = uncapped.
+/**
+ * @brief Configuração do renderer no nível do projeto, lida uma vez no boot.
+ *
+ * Carregada de um arquivo JSON (project.conf), centraliza decisões de
+ * apresentação que pertencem ao engine/aplicação, não a uma cena específica:
+ * qual backend criar, espaço de cor de saída, vsync, cena inicial e
+ * propriedades da janela.
+ *
+ * Sobre @ref srgb: @c false (padrão) usa swapchain/framebuffer linear (UNORM),
+ * escrevendo as cores como estão; @c true usa sRGB, fazendo a GPU converter
+ * linear->sRGB na escrita. Atenção: isso só muda o espaço de cor de SAÍDA; não
+ * reinterpreta as cores de entrada (da cena ou de texturas) como sRGB — o
+ * tratamento gamma-correct da entrada é uma etapa separada ainda não
+ * implementada.
+ *
+ * @see loadRendererConfig
+ */
 struct RendererConfig {
-    GraphicsAPI api = GraphicsAPI::OPENGL;
-    bool srgb = false;
-    bool vsync = true;
+    GraphicsAPI api = GraphicsAPI::OPENGL; ///< Backend gráfico a ser criado.
+    bool srgb = false;                     ///< Espaço de cor de saída (ver descrição da struct).
+    bool vsync = true;                     ///< @c true limita à taxa de atualização do monitor.
 
-    // Initial scene the engine loads at boot, as a compiled-scene filename
-    // resolved relative to the working directory (e.g. "scene.scnb"). This
-    // replaces the hardcoded scene name that used to live in main.cpp, so each
-    // project declares its own entry scene in project.conf. Empty means "no
-    // scene configured" and the engine logs a warning instead of guessing.
+    /**
+     * Cena inicial carregada no boot, como nome de arquivo de cena compilada
+     * resolvido relativo ao diretório de trabalho (ex.: "scene.scnb"). Cada
+     * projeto declara sua cena de entrada em project.conf. Vazio significa
+     * "nenhuma cena configurada" e o engine registra um aviso em vez de adivinhar.
+     */
     std::string scene = "scene.scnb";
 
-    // Window properties for the project. Defaults match the historical
-    // hardcoded values in main.cpp (1280x720, title "Engine").
-    std::string windowTitle = "Engine";
-    int windowWidth = 1280;
-    int windowHeight = 720;
+    std::string windowTitle = "Engine"; ///< Título da janela.
+    int windowWidth = 1280;             ///< Largura da janela, em pixels.
+    int windowHeight = 720;             ///< Altura da janela, em pixels.
 };
 
-// Loads the config from `path` (default "project.conf"). Missing file or any
-// parse error is non-fatal: the returned config keeps its safe defaults, and a
-// warning is logged. This guarantees the engine still boots without the file.
+/**
+ * @brief Carrega a configuração do renderer a partir de um arquivo.
+ *
+ * Arquivo ausente ou erro de parse não são fatais: a configuração retornada
+ * mantém os padrões seguros e um aviso é registrado. Assim o engine sempre
+ * inicia, mesmo sem o arquivo.
+ *
+ * @param path Caminho do arquivo de configuração (padrão "project.conf").
+ * @return A configuração carregada, ou os padrões em caso de falha.
+ */
 RendererConfig loadRendererConfig(const std::string& path = "project.conf");
 
 #endif // RENDERER_CONFIG_HPP

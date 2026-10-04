@@ -1,0 +1,79 @@
+# Doxyfile for Yume Engine
+# Generated for the core engine source (core/src)
+
+#---------------------------------------------------------------------------
+# Project related configuration
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "Yume Engine"
+PROJECT_BRIEF          = "Cross-platform game engine core (PC / Switch / Web)"
+OUTPUT_DIRECTORY       = docs
+CREATE_SUBDIRS         = NO
+OPTIMIZE_OUTPUT_FOR_C  = NO
+BUILTIN_STL_SUPPORT    = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+TAB_SIZE               = 4
+
+#---------------------------------------------------------------------------
+# Build related configuration
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_ANON_NSPACES   = YES
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+
+#---------------------------------------------------------------------------
+# Input related configuration
+#---------------------------------------------------------------------------
+INPUT                  = core/src
+INPUT_ENCODING         = UTF-8
+FILE_PATTERNS          = *.cpp *.hpp *.h *.cc *.cxx *.hxx
+RECURSIVE              = YES
+EXCLUDE                = core/src/nlohmann \
+                         core/src/tinyobjloader \
+                         core/src/stb_image.h \
+                         core/src/stb_image_impl.cpp
+EXCLUDE_PATTERNS       = */build/* */third_party/* */vendor/* */.git/*
+
+#---------------------------------------------------------------------------
+# Source browsing related configuration
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+#---------------------------------------------------------------------------
+# HTML output
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+
+#---------------------------------------------------------------------------
+# LaTeX / other outputs (disabled)
+#---------------------------------------------------------------------------
+GENERATE_LATEX         = NO
+GENERATE_RTF           = NO
+GENERATE_MAN           = NO
+GENERATE_XML           = NO
+
+#---------------------------------------------------------------------------
+# Diagram generation (Graphviz / dot)
+#---------------------------------------------------------------------------
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES

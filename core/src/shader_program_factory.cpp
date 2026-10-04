@@ -1,3 +1,11 @@
+/**
+ * @file shader_program_factory.cpp
+ * @brief Implementação de ShaderProgramFactory::create.
+ *
+ * Assim como a fábrica de compiladores, os backends disponíveis são decididos
+ * por macros de plataforma (EGL no Switch, WebGL no navegador, OpenGL/Vulkan e
+ * DirectX 12 no desktop Windows). Retorna @c nullptr para APIs indisponíveis.
+ */
 #include "shader_program_factory.hpp"
 
 #ifdef __SWITCH__

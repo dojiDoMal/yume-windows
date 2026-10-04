@@ -59,13 +59,12 @@ if /i "%TARGET%"=="web" (
     cmake --build "%BUILD_DIR%"
     if errorlevel 1 exit /b 1
 
+    echo Build completed.
     if %RUN%==1 (
-        echo Running Web build on http://localhost:8000
-        cd "%BUILD_DIR%"
-        python -m http.server 8000
-    ) else (
-        echo Build completed.
-        echo To run: python -m http.server 8000 -d %BUILD_DIR%
+        echo.
+        echo Note: -r/--run has no effect for a standalone engine build. The
+        echo engine is a library ^(yume_core^) with no runnable app. Build and
+        echo run a project that links it, e.g. ..\yume-examples\rotating-cube.
     )
 ) 
 
@@ -76,9 +75,25 @@ if /i "%TARGET%"=="native" (
     echo Building for native...
 
     if not exist "%BUILD_DIR%\CMakeCache.txt" (
+        REM vcpkg's manifest install runs during project() configuration and picks
+        REM the triplet BEFORE our -DVCPKG_TARGET_TRIPLET is applied. On Windows it
+        REM defaults to x64-windows (MSVC) and then fails with "Unable to find a
+        REM valid Visual Studio instance" because this is a MinGW/MSYS2 toolchain.
+        REM Setting VCPKG_DEFAULT_TRIPLET / VCPKG_DEFAULT_HOST_TRIPLET in the env
+        REM forces the MinGW triplet at that early stage. We also pin the MSYS2
+        REM UCRT64 gcc/g++ and mingw32-make so CMake doesn't go hunting for MSVC.
         set CC=gcc
         set CXX=g++
-        cmake -G "MinGW Makefiles" -DCMAKE_TOOLCHAIN_FILE=C:/Portable/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic -B "%BUILD_DIR%"
+        set "VCPKG_DEFAULT_TRIPLET=x64-mingw-dynamic"
+        set "VCPKG_DEFAULT_HOST_TRIPLET=x64-mingw-dynamic"
+        cmake -G "MinGW Makefiles" ^
+            -DCMAKE_MAKE_PROGRAM=C:/msys64/ucrt64/bin/mingw32-make.exe ^
+            -DCMAKE_C_COMPILER=C:/msys64/ucrt64/bin/gcc.exe ^
+            -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe ^
+            -DCMAKE_TOOLCHAIN_FILE=C:/Portable/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+            -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic ^
+            -DVCPKG_HOST_TRIPLET=x64-mingw-dynamic ^
+            -B "%BUILD_DIR%"
         if errorlevel 1 (
             echo Build configuration failed!
             exit /b 1
@@ -91,17 +106,12 @@ if /i "%TARGET%"=="native" (
         exit /b 1
     )
 
+    echo Build completed.
     if %RUN%==1 (
-        echo Running native build...
-        REM The sandbox example is built via yume_add_project, which drops the
-        REM executable and its runtime assets in the project's build subdir. The
-        REM exe's working dir must be that folder so relative asset paths
-        REM (scene.scnb, shaders, cube.obj, ...) resolve.
-        pushd "%BUILD_DIR%\examples\sandbox"
-        sandbox.exe
-        popd
-    ) else (
-        echo Build completed.
+        echo.
+        echo Note: -r/--run has no effect for a standalone engine build. The
+        echo engine is a library ^(yume_core^) with no runnable app. Build and
+        echo run a project that links it, e.g. ..\yume-examples\rotating-cube.
     )
 )
 

@@ -74,8 +74,8 @@ endif()
 #
 # Everything under core/src except scene_compiler.cpp, which is a separate
 # host-tool executable (built above). The engine no longer contains an entry
-# point: each project ships its own main.cpp (see examples/sandbox) and links
-# yume_core.
+# point: each project ships its own main.cpp (see ../yume-examples/rotating-cube)
+# and links yume_core.
 #
 # Backends are filtered per platform exactly as before (one backend dir per API;
 # keep only what this build can use).
@@ -125,17 +125,12 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Default application.
+# No default application.
 #
-# When this CMakeLists is the top-level project (a standalone engine build, e.g.
-# build.bat), also build the sandbox example so there is a runnable executable.
-# When the engine is pulled into another project via add_subdirectory(), the
-# consuming project owns its own executable and we skip this.
-#
-# The guard is one-directional: examples/sandbox only add_subdirectory()'s the
-# engine when `yume_core` is undefined, and here `yume_core` is already defined,
-# so including the sandbox does not re-enter this file.
+# A standalone engine build (this CMakeLists as the top-level project, e.g.
+# build.bat) produces only the engine library `yume_core` and the host tools
+# (scene_compiler) -- there is no built-in executable. The engine is a library;
+# a runnable app is always owned by a consuming project that links yume_core and
+# calls yume_add_project() (see ../yume-examples/rotating-cube for a complete
+# example). The eventual in-repo executable is the editor, not a sample app.
 # -----------------------------------------------------------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT TARGET sandbox)
-    add_subdirectory(${YUME_ENGINE_ROOT}/examples/sandbox ${CMAKE_BINARY_DIR}/examples/sandbox)
-endif()

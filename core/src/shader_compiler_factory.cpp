@@ -1,3 +1,12 @@
+/**
+ * @file shader_compiler_factory.cpp
+ * @brief Implementação de ShaderCompilerFactory::create.
+ *
+ * O conjunto de backends disponíveis é definido em tempo de compilação por
+ * macros de plataforma: o Switch usa EGL, builds WebGL usam WebGL e o desktop
+ * usa OpenGL/Vulkan (mais DirectX 12 no Windows). O @c switch devolve a
+ * implementação correspondente ou @c nullptr para APIs indisponíveis.
+ */
 #include "shader_compiler_factory.hpp"
 
 #ifdef __SWITCH__
@@ -15,7 +24,7 @@
 std::unique_ptr<ShaderCompiler> ShaderCompilerFactory::create(GraphicsAPI api, void* context) {
     switch (api) {
 #ifdef __SWITCH__
-    case GraphicsAPI::SWITCH:
+    case GraphicsAPI::EGL:
         return std::make_unique<EGLShaderCompiler>();
 #elif PLATFORM_WEBGL
     case GraphicsAPI::WEBGL:

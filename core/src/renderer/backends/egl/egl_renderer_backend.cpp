@@ -63,7 +63,7 @@ bool EGLRendererBackend::init(SDL_Window* window) {
 
     SDL_GLContext glContext = SDL_GL_CreateContext(window);
     if (!glContext) {
-        LOG_INFO("Failed to create OpenGL context for SDL Window: %s\n", SDL_GetError());
+        LOG_INFO(std::string("Failed to create OpenGL context for SDL Window: ") + SDL_GetError());
         SDL_DestroyWindow(window);
         return false;
     }
@@ -71,7 +71,7 @@ bool EGLRendererBackend::init(SDL_Window* window) {
     // Load OpenGL routines using glad. SDL exposes the
     // EGL loader through SDL_GL_GetProcAddress.
     if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
-        LOG_INFO("Failed to load OpenGL routines using glad: %s\n", SDL_GetError());
+        LOG_INFO(std::string("Failed to load OpenGL routines using glad: ") + SDL_GetError());
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(window);
         return false;
@@ -79,7 +79,7 @@ bool EGLRendererBackend::init(SDL_Window* window) {
 
     // Vsync from project.conf: 1 = cap to refresh rate, 0 = uncapped.
     if (SDL_GL_SetSwapInterval(vsyncEnabled ? 1 : 0) != 0) {
-        LOG_INFO("Failed to set Swap Interval for SDL Window: %s\n", SDL_GetError());
+        LOG_INFO(std::string("Failed to set Swap Interval for SDL Window: ") + SDL_GetError());
     }
 
     return init();
@@ -298,10 +298,11 @@ void EGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& obj
 
     static bool printed = false;
     if (!printed) {
-        LOG_INFO("Groups: %zu\n", instanceGroups.size());
+        LOG_INFO(std::string("Groups: ") + std::to_string(instanceGroups.size()));
         for (auto& [key, group] : instanceGroups)
-            LOG_INFO("  VAO %u shader %u: %zu instances\n", key.vao, key.shader,
-                     group.models.size());
+            LOG_INFO(std::string("  VAO ") + std::to_string(key.vao) + " shader " +
+                     std::to_string(key.shader) + ": " +
+                     std::to_string(group.models.size()) + " instances");
         printed = true;
     }
 
@@ -559,7 +560,7 @@ GLuint EGLRendererBackend::compileTextShader(const std::string& path, GLenum typ
     if (!ok) {
         char log[512];
         glGetShaderInfoLog(shader, 512, nullptr, log);
-        LOG_INFO("TextRenderer shader error: %s\n", log);
+        LOG_INFO(std::string("TextRenderer shader error: ") + log);
         glDeleteShader(shader);
         return 0;
     }
@@ -588,7 +589,7 @@ bool EGLRendererBackend::initText(const FontAtlas& atlas, unsigned int texID,
     if (!ok) {
         char log[512];
         glGetProgramInfoLog(textShaderProgram, 512, nullptr, log);
-        LOG_INFO("TextRenderer link error: %s\n", log);
+        LOG_INFO(std::string("TextRenderer link error: ") + log);
         return false;
     }
 

@@ -7,6 +7,16 @@
 #include <functional>
 
 namespace Yume {
+
+/**
+ * @brief Implementação de IInput para desktop, baseada em SDL.
+ *
+ * Lê o estado do teclado e a fila de eventos do SDL, dispara os callbacks das
+ * teclas associadas e rastreia o pedido de encerramento (fechar a janela).
+ * Criada pela IInputFactory no desktop.
+ *
+ * @see IInput, IInputFactory
+ */
 class DesktopInput : public IInput {
 
     using ActionCallback = std::function<void()>;
@@ -18,9 +28,9 @@ class DesktopInput : public IInput {
     bool isKeyPressed(KeyCode key) override;
 
   private:
-    const Uint8* keyboard_state = nullptr;
-    bool quit_requested = false;
-    std::unordered_map<KeyCode, ActionCallback> key_bindings;
+    const Uint8* keyboard_state = nullptr;                        ///< Estado atual do teclado (SDL).
+    bool quit_requested = false;                                  ///< @c true quando o encerramento foi pedido.
+    std::unordered_map<KeyCode, ActionCallback> key_bindings;     ///< Callbacks associados por tecla.
 };
 } // namespace Yume
 

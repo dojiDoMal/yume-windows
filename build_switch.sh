@@ -25,6 +25,8 @@ cd "$(cygpath -u "$PROJECT_DIR_WIN")"
 
 "$CMAKE" --build build/switch
 
-# The default build includes the sandbox's <target>_nro target, so the runnable
-# homebrew lands next to the sandbox's build artifacts.
-echo "Build done. NRO: build/switch/examples/sandbox/sandbox.nro"
+# A standalone engine build produces only the engine library (yume_core) and
+# host tools -- there is no app and therefore no .nro. The runnable homebrew is
+# produced by a consuming project (e.g. ../yume-examples/rotating-cube), whose
+# own build drives yume_add_project() and emits <target>.nro.
+echo "Build done. Engine library + tools built (no .nro: the engine has no app)."
