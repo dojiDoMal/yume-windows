@@ -3,18 +3,17 @@
 
 #include "graphics_api.hpp"
 #include "window/mml/multimedia_layer.hpp"
-#include <GL/glew.h>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 class N3DSLayer : public MultimediaLayer {
   private:
-
   public:
-    ~N3DSLayer();
+    ~N3DSLayer() = default;
 
-    void configureContext(const GraphicsAPI& graphicsAPI);
+    bool init() override;
+    void configureContext(const GraphicsAPI& graphicsAPI) override;
+    void* createMainDisplay(unsigned int flags, const WindowDesc& opts) override;
+    void destroyDisplay(void* display) override;
+    void end() override;
 };
 
 #endif // N3DS_LAYER_HPP

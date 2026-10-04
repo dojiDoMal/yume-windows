@@ -7,9 +7,9 @@
 #include "components/text_renderer_component.hpp"
 #include "input/i_input_factory.hpp"
 #include "logger.hpp"
+#include "scene/world_object_manager.hpp"
 #include "text_renderer.hpp"
 #include "timer.hpp"
-#include "scene/world_object_manager.hpp"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keycode.h>
@@ -47,18 +47,6 @@ bool Application::boot() {
     }
     chdir("romfs:/");
 #endif
-
-    // The engine owns the SDL lifecycle. We build with SDL_MAIN_HANDLED (see
-    // PC.cmake / Switch.cmake), so SDL does NOT hijack main() into SDL_main and
-    // we don't link SDL2main. That means we must tell SDL the entry point is
-    // ready and initialize the video subsystem ourselves before creating any
-    // window.
-    SDL_SetMainReady();
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        LOG_ERROR(std::string("SDL_Init failed: ") + SDL_GetError());
-        return false;
-    }
-
     // Load project-level config (api/srgb/vsync + window + initial scene) from
     // project.conf. Missing/invalid file falls back to safe defaults inside the
     // loader. WebGL/Switch keep a fixed API below regardless of the file.
@@ -68,7 +56,7 @@ bool Application::boot() {
     winDesc.width = rendererConfig.windowWidth;
     winDesc.height = rendererConfig.windowHeight;
 
-    screenManager = std::make_unique<WindowManager>();
+    screenManager = std::make_unique<DisplayManager>();
 
 #if defined(PLATFORM_WEBGL)
     // WebGL is fixed to its own API regardless of project.conf.
@@ -85,7 +73,7 @@ bool Application::boot() {
 #endif
 
     if (!screenManager->init(winDesc)) {
-        LOG_ERROR("WindowManager init failed");
+        LOG_ERROR("DisplayManager init failed");
         return false;
     }
 
@@ -203,7 +191,12 @@ void Application::mainLoop() {
 }
 
 void Application::shutdown() {
-    SDL_Quit();
+    // The DisplayManager owns the multimedia layer, which owns the SDL
+    // lifecycle (SDL_Init in SDL2Layer::init / SDL_Quit in SDL2Layer::end).
+    // Destroy it here so SDL is torn down deterministically before anything
+    // else (e.g. romfsExit on the Switch) runs. Do NOT call SDL_Quit() here:
+    // that would double-finalize SDL.
+    screenManager.reset();
 #ifdef __SWITCH__
     romfsExit();
 #endif

@@ -4,16 +4,17 @@
 #include "window/mml/multimedia_layer.hpp"
 #include <GL/glew.h>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 class SDL2Layer : public MultimediaLayer {
   private:
-
   public:
-    ~SDL2Layer();
+    ~SDL2Layer() = default;
 
-    void configureContext(const GraphicsAPI& graphicsAPI);
+    bool init() override;
+    void configureContext(const GraphicsAPI& graphicsAPI) override;
+    void* createMainDisplay(unsigned int flags, const WindowDesc& opts) override;
+    void destroyDisplay(void* display) override;
+    void end() override;
 };
 
 #endif

@@ -6,8 +6,8 @@
 #include "renderer/renderer_backend.hpp"
 #include "renderer_config.hpp"
 #include "scene/scene_manager.hpp"
+#include "window/display_manager.hpp"
 #include "window/window_desc.hpp"
-#include "window/window_manager.hpp"
 
 #include <memory>
 #include <string>
@@ -67,7 +67,7 @@ class Application {
     /// @brief Descrição da janela (tamanho, título).
     const WindowDesc& window() const { return winDesc; }
 
-    WindowDesc winDesc;                      ///< Config da janela; project.conf sobrescreve título/tamanho.
+    WindowDesc winDesc; ///< Config da janela; project.conf sobrescreve título/tamanho.
     std::string configPath = "project.conf"; ///< Caminho do arquivo de configuração do projeto.
 
   private:
@@ -85,7 +85,7 @@ class Application {
     void updateDebugOverlay(float deltaTime);
 
     RendererConfig rendererConfig;
-    std::unique_ptr<WindowManager> screenManager;
+    std::unique_ptr<DisplayManager> screenManager;
     std::unique_ptr<SceneManager> sceneManager;
     RendererBackend* rendererBackend = nullptr;
 
