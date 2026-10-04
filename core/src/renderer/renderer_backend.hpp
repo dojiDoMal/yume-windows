@@ -1,16 +1,16 @@
 #ifndef RENDERER_BACKEND_HPP
 #define RENDERER_BACKEND_HPP
 
-#include "../color.hpp"
-#include "../components/camera.hpp"
-#include "../components/light.hpp"
-#include "../font_atlas.hpp"
-#include "../graphics_api.hpp"
-#include "../matrix4.hpp"
-#include "../mesh.hpp"
-#include "../shader_program.hpp"
-#include "../sprite.hpp"
-#include "../world_object.hpp"
+#include "color.hpp"
+#include "components/camera.hpp"
+#include "components/light.hpp"
+#include "assets/font_atlas.hpp"
+#include "graphics_api.hpp"
+#include "math/matrix4.hpp"
+#include "assets/mesh.hpp"
+#include "assets/shader_program.hpp"
+#include "scene/sprite.hpp"
+#include "scene/world_object.hpp"
 #include <memory>
 #include <vector>
 
@@ -65,7 +65,6 @@ class RendererBackend {
     virtual bool init() = 0;
     virtual bool init(SDL_Window* window) = 0;
     virtual void present(SDL_Window* window) = 0;
-    virtual bool initWindowContext() = 0;
     virtual void bindCamera(Camera* camera) = 0;
     virtual void applyMaterial(Material* material) = 0;
     virtual void clear(Camera* camera) = 0;

@@ -1,7 +1,7 @@
 #ifndef VULKAN_MESH_BUFFER_HPP
 #define VULKAN_MESH_BUFFER_HPP
 
-#include "mesh_buffer.hpp"
+#include "assets/mesh_buffer.hpp"
 #include <vulkan/vulkan.h>
 
 class VulkanRendererBackend;

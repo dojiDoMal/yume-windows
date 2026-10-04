@@ -1,8 +1,8 @@
 #ifndef DESKTOP_INPUT_HPP
 #define DESKTOP_INPUT_HPP
 
-#include "i_input.hpp"
-#include "input_key.hpp"
+#include "input/i_input.hpp"
+#include "input/input_key.hpp"
 #include <SDL_keycode.h>
 #include <functional>
 

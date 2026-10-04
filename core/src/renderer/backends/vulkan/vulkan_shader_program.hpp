@@ -1,9 +1,9 @@
 #ifndef VULKAN_SHADER_PROGRAM_HPP
 #define VULKAN_SHADER_PROGRAM_HPP
 
-#include "../../../shader_program.hpp"
-#include "../../../shader_type.hpp"
-#include "material.hpp"
+#include "assets/shader_program.hpp"
+#include "assets/shader_type.hpp"
+#include "assets/material.hpp"
 #include <vulkan/vulkan.h>
 #include <vector>
 

@@ -1,8 +1,8 @@
 #ifndef MESH_RENDERER_HPP
 #define MESH_RENDERER_HPP
 
-#include "../material.hpp"
-#include "component.hpp"
+#include "assets/material.hpp"
+#include "components/component.hpp"
 #include <memory>
 
 /**

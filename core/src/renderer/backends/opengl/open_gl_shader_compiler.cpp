@@ -1,5 +1,5 @@
 #define CLASS_NAME "OpenGLShaderCompiler"
-#include "../../../log_macros.hpp"
+#include "log_macros.hpp"
 
 #include "open_gl_shader_compiler.hpp"
 #include <cstdint>
@@ -57,8 +57,14 @@ GLenum OpenGLShaderCompiler::toGLShaderType(ShaderType type) {
     switch(type) {
         case ShaderType::VERTEX: return GL_VERTEX_SHADER;
         case ShaderType::FRAGMENT: return GL_FRAGMENT_SHADER;
+        // Geometry/compute stages are not guaranteed on OpenGL ES (Switch): the
+        // loader only defines these tokens when the running GL/GLES exposes them.
+#ifdef GL_GEOMETRY_SHADER
         case ShaderType::GEOMETRY: return GL_GEOMETRY_SHADER;
+#endif
+#ifdef GL_COMPUTE_SHADER
         case ShaderType::COMPUTE: return GL_COMPUTE_SHADER;
+#endif
         default: return GL_VERTEX_SHADER;
     }
 }

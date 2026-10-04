@@ -1,10 +1,10 @@
 #ifndef LOD_GROUP_HPP
 #define LOD_GROUP_HPP
 
-#include "../math.hpp"
-#include "../mesh.hpp"
-#include "../vector3.hpp"
-#include "component.hpp"
+#include "math/math.hpp"
+#include "assets/mesh.hpp"
+#include "math/vector3.hpp"
+#include "components/component.hpp"
 #include <cmath>
 #include <memory>
 #include <vector>

@@ -1,7 +1,7 @@
 #ifndef WEB_GL_MESH_BUFFER_HPP
 #define WEB_GL_MESH_BUFFER_HPP
 
-#include "mesh_buffer.hpp"
+#include "assets/mesh_buffer.hpp"
 #include <GLES3/gl3.h>
 
 class WebGLMeshBuffer : public MeshBuffer {

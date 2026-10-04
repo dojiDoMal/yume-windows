@@ -1,10 +1,10 @@
 #ifndef D3D12_RENDERER_BACKEND_HPP
 #define D3D12_RENDERER_BACKEND_HPP
 
-#include "../../../matrix4.hpp"
-#include "../../../mesh.hpp"
-#include "../../../world_object.hpp"
-#include "../../renderer_backend.hpp"
+#include "math/matrix4.hpp"
+#include "assets/mesh.hpp"
+#include "scene/world_object.hpp"
+#include "renderer/renderer_backend.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <unordered_map>
@@ -136,7 +136,6 @@ class D3D12RendererBackend : public RendererBackend {
     unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
-    bool initWindowContext() override;
     void bindCamera(Camera* camera) override;
     void applyMaterial(Material* material) override;
     void renderWorldObjects(const std::vector<WorldObject*>& objects,

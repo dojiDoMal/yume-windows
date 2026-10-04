@@ -1,12 +1,12 @@
 #define CLASS_NAME "Renderer"
-#include "../log_macros.hpp"
+#include "log_macros.hpp"
 
-#include "../components/lod_group.hpp"
-#include "../math.hpp"
-#include "../world_object.hpp"
-#include "frustum.hpp"
-#include "renderer.hpp"
-#include "renderer_factory.hpp"
+#include "components/lod_group.hpp"
+#include "math/math.hpp"
+#include "scene/world_object.hpp"
+#include "renderer/frustum.hpp"
+#include "renderer/renderer.hpp"
+#include "renderer/renderer_factory.hpp"
 #include <algorithm>
 #include <cmath>
 

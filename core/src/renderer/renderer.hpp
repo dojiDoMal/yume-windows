@@ -1,9 +1,9 @@
 #ifndef RENDERER_HPP
 #define RENDERER_HPP
 
-#include "../graphics_api.hpp"
-#include "../scene.hpp"
-#include "renderer_backend.hpp"
+#include "graphics_api.hpp"
+#include "scene/scene.hpp"
+#include "renderer/renderer_backend.hpp"
 
 class Material;
 

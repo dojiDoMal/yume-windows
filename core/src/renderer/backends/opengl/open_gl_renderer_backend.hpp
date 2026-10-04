@@ -1,12 +1,16 @@
 #ifndef OPEN_GL_RENDERER_BACKEND_HPP
 #define OPEN_GL_RENDERER_BACKEND_HPP
 
-#include "../../../graphics_api.hpp"
-#include "../../../matrix4.hpp"
-#include "../../../mesh.hpp"
-#include "../../../world_object.hpp"
-#include "../../renderer_backend.hpp"
+#include "graphics_api.hpp"
+#include "math/matrix4.hpp"
+#include "assets/mesh.hpp"
+#include "scene/world_object.hpp"
+#include "renderer/renderer_backend.hpp"
+#ifdef __SWITCH__
+#include <glad/glad.h>
+#else
 #include <GL/glew.h>
+#endif
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -59,7 +63,6 @@ class OpenGLRendererBackend : public RendererBackend {
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
     void present(SDL_Window* window) override;
-    bool initWindowContext() override;
     void bindCamera(Camera* camera) override;
     void applyMaterial(Material* material) override;
     void setBufferDataImpl(const std::string& name, const void* data, size_t size) override;

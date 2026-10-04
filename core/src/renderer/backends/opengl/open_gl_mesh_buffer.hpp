@@ -1,8 +1,12 @@
 #ifndef OPEN_GL_MESH_BUFFER_HPP
 #define OPEN_GL_MESH_BUFFER_HPP
 
-#include "mesh_buffer.hpp"
+#include "assets/mesh_buffer.hpp"
+#ifdef __SWITCH__
+#include <glad/glad.h>
+#else
 #include <GL/glew.h>
+#endif
 
 class OpenGLMeshBuffer : public MeshBuffer {
 private:

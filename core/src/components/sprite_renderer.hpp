@@ -1,8 +1,8 @@
 #ifndef SPRITE_RENDERER_HPP
 #define SPRITE_RENDERER_HPP
 
-#include "component.hpp"
-#include "../material.hpp"
+#include "components/component.hpp"
+#include "assets/material.hpp"
 #include <memory>
 
 /**

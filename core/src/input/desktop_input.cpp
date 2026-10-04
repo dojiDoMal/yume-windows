@@ -1,4 +1,4 @@
-#include "desktop_input.hpp"
+#include "input/desktop_input.hpp"
 #include <SDL_keycode.h>
 
 void Yume::DesktopInput::processEvents() {

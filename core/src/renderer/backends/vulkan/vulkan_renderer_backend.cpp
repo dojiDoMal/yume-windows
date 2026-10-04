@@ -1,15 +1,15 @@
-#include "mesh_buffer_factory.hpp"
-#include "shader_compiler_factory.hpp"
+#include "assets/mesh_buffer_factory.hpp"
+#include "assets/shader_compiler_factory.hpp"
 #define CLASS_NAME "VulkanRendererBackend"
-#include "../../../log_macros.hpp"
+#include "log_macros.hpp"
 
-#include "../../../color.hpp"
-#include "../../../components/mesh_renderer.hpp"
-#include "../../../font_atlas.hpp"
-#include "../../../material.hpp"
-#include "../../../math.hpp"
-#include "../../../stb_image.h"
-#include "shader_program_factory.hpp"
+#include "color.hpp"
+#include "components/mesh_renderer.hpp"
+#include "assets/font_atlas.hpp"
+#include "assets/material.hpp"
+#include "math/math.hpp"
+#include "assets/stb_image.h"
+#include "assets/shader_program_factory.hpp"
 #include "vulkan_mesh_buffer.hpp"
 #include "vulkan_renderer_backend.hpp"
 #include "vulkan_shader_program.hpp"
@@ -169,12 +169,6 @@ bool VulkanRendererBackend::init(SDL_Window* win) {
     setSurface(surf);
 
     return init();
-}
-
-bool VulkanRendererBackend::initWindowContext() {
-    // Instance creation happens in init(window) now (it needs to precede
-    // surface creation). Kept as a no-op so the window flags path still works.
-    return true;
 }
 
 bool VulkanRendererBackend::init() {

@@ -1,16 +1,19 @@
 #ifndef WINDOW_MANAGER_HPP
 #define WINDOW_MANAGER_HPP
 
-#include "../graphics_api.hpp"
-#include "../renderer/renderer.hpp"
-#include "../renderer_config.hpp"
-#include "window_desc.hpp"
+#include "graphics_api.hpp"
+#include "renderer/renderer.hpp"
+#include "renderer_config.hpp"
+#include "window/window_desc.hpp"
+#include "window/multimedia_layer.hpp"
 #include <SDL2/SDL.h>
 
+// TODO: talvez precise mudaar o nome dessa classe pra algo como rendertargetmanaager ou displaymanager
 class WindowManager {
   private:
     GraphicsAPI graphicsApi;
     RendererConfig rendererConfig;
+    MultimediaLayer* multiMediaLayer = nullptr;
     SDL_Window* window = nullptr;
     Renderer* renderer = nullptr;
 

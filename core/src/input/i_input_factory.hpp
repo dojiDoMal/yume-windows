@@ -1,7 +1,7 @@
 #ifndef IINPUT_FACTORY_HPP
 #define IINPUT_FACTORY_HPP
 
-#include "i_input.hpp"
+#include "input/i_input.hpp"
 
 namespace Yume {
 

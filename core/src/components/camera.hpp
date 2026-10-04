@@ -1,9 +1,9 @@
 #ifndef CAMERA_COMPONENT_HPP
 #define CAMERA_COMPONENT_HPP
 
-#include "../color.hpp"
-#include "../skybox.hpp"
-#include "component.hpp"
+#include "color.hpp"
+#include "scene/skybox.hpp"
+#include "components/component.hpp"
 
 /**
  * @brief Componente de câmera: define o ponto de vista da cena.

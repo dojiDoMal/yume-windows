@@ -1,8 +1,12 @@
 #ifndef OPEN_GL_SHADER_PROGRAM_HPP
 #define OPEN_GL_SHADER_PROGRAM_HPP
 
-#include "shader_program.hpp"
+#include "assets/shader_program.hpp"
+#ifdef __SWITCH__
+#include <glad/glad.h>
+#else
 #include <GL/glew.h>
+#endif
 #include <unordered_map>
 #include <string>
 

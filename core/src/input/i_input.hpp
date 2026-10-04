@@ -1,7 +1,7 @@
 #ifndef I_INPUT_HPP
 #define I_INPUT_HPP
 
-#include "input_key.hpp"
+#include "input/input_key.hpp"
 #include <SDL2/SDL.h>
 #include <functional>
 

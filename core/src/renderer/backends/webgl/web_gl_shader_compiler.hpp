@@ -1,7 +1,7 @@
 #ifndef WEB_GL_SHADER_COMPILER_HPP
 #define WEB_GL_SHADER_COMPILER_HPP
 
-#include "shader_compiler.hpp"
+#include "assets/shader_compiler.hpp"
 #include <GLES3/gl3.h>
 
 class WebGLShaderCompiler : public ShaderCompiler {

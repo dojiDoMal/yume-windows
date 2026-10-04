@@ -1,7 +1,7 @@
 #ifndef WEB_GL_SHADER_PROGRAM_HPP
 #define WEB_GL_SHADER_PROGRAM_HPP
 
-#include "shader_program.hpp"
+#include "assets/shader_program.hpp"
 #include <GLES3/gl3.h>
 
 class WebGLShaderProgram : public ShaderProgram {

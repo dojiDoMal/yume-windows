@@ -1,4 +1,4 @@
-#include "light.hpp"
+#include "components/light.hpp"
 
 void Light::setType(LightType t) { type = t; }
 

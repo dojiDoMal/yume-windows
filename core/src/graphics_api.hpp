@@ -11,11 +11,11 @@
  * @see ShaderCompilerFactory, MeshBufferFactory
  */
 enum class GraphicsAPI {
-    OPENGL,   ///< OpenGL — desktop (Windows, Linux, macOS).
+    CITRO3D,  ///< Citro 3D - Nintendo 3DS 
+    OPENGL,   ///< OpenGL (desktop via GLEW) e OpenGL ES no Nintendo Switch (via EGL/glad).
     WEBGL,    ///< WebGL — builds para navegador (Emscripten).
     VULKAN,   ///< Vulkan — desktop de alto desempenho.
-    DIRECTX12, ///< DirectX 12 — exclusivo Windows.
-    EGL       ///< EGL/OpenGL ES — compatível com o Nintendo Switch.
+    DIRECTX12 ///< DirectX 12 — exclusivo Windows.
 };
 
 #endif // GRAPHICS_API_HPP

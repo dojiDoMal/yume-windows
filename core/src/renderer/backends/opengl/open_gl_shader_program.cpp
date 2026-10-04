@@ -1,7 +1,7 @@
 #define CLASS_NAME "OpenGLShaderProgram"
 #include "open_gl_shader_program.hpp"
 #include "log_macros.hpp"
-#include "shader_asset.hpp"
+#include "assets/shader_asset.hpp"
 #include <cstdint>
 
 

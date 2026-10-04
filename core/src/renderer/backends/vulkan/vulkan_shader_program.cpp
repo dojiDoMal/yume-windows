@@ -1,5 +1,5 @@
 #include "vulkan_shader_program.hpp"
-#include "../../../shader_asset.hpp"
+#include "assets/shader_asset.hpp"
 #include "vulkan_renderer_backend.hpp"
 #include <array>
 #include <cstring>

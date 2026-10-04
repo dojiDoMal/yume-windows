@@ -1,8 +1,12 @@
 #ifndef OPEN_GL_SHADER_COMPILER_HPP
 #define OPEN_GL_SHADER_COMPILER_HPP
 
-#include "../../../shader_compiler.hpp"
+#include "assets/shader_compiler.hpp"
+#ifdef __SWITCH__
+#include <glad/glad.h>
+#else
 #include <GL/glew.h>
+#endif
 
 class OpenGLShaderCompiler : public ShaderCompiler {
 public:

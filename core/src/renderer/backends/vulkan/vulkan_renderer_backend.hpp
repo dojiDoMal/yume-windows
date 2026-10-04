@@ -1,10 +1,10 @@
 #ifndef VULKAN_RENDERER_BACKEND_HPP
 #define VULKAN_RENDERER_BACKEND_HPP
 
-#include "../../../matrix4.hpp"
-#include "../../../mesh.hpp"
-#include "../../../world_object.hpp"
-#include "../../renderer_backend.hpp"
+#include "math/matrix4.hpp"
+#include "assets/mesh.hpp"
+#include "scene/world_object.hpp"
+#include "renderer/renderer_backend.hpp"
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -169,7 +169,6 @@ class VulkanRendererBackend : public RendererBackend {
     unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
-    bool initWindowContext() override;
     void bindCamera(Camera* camera) override;
     void applyMaterial(Material* material) override;
     void renderWorldObjects(const std::vector<WorldObject*>& objects,

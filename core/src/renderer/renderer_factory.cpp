@@ -1,7 +1,7 @@
-#include "renderer_factory.hpp"
+#include "renderer/renderer_factory.hpp"
 
 #ifdef __SWITCH__
-#include "backends/egl/egl_renderer_backend.hpp"
+#include "backends/opengl/open_gl_renderer_backend.hpp"
 #elif PLATFORM_WEBGL
 #include "backends/webgl/web_gl_renderer_backend.hpp"
 #else
@@ -15,13 +15,6 @@
 RendererBackend* RendererFactory::create(const GraphicsAPI& api) {
     switch (api) {
 
-    case GraphicsAPI::EGL:
-#ifdef __SWITCH__
-        return new EGLRendererBackend();
-#else
-        return nullptr;
-#endif
-
     case GraphicsAPI::WEBGL:
 #ifdef PLATFORM_WEBGL
         return new WebGLRendererBackend();
@@ -29,8 +22,10 @@ RendererBackend* RendererFactory::create(const GraphicsAPI& api) {
         return nullptr;
 #endif
 
+    // OpenGL covers both the desktop (GLEW) and the Switch (OpenGL ES via
+    // EGL/glad); both share the single OpenGLRendererBackend implementation.
     case GraphicsAPI::OPENGL:
-#if !defined(PLATFORM_WEBGL) && !defined(__SWITCH__)
+#if !defined(PLATFORM_WEBGL)
         return new OpenGLRendererBackend();
 #else
         return nullptr;

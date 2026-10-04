@@ -5,7 +5,7 @@
 #include "input/i_input.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "renderer_config.hpp"
-#include "scene_manager.hpp"
+#include "scene/scene_manager.hpp"
 #include "window/window_desc.hpp"
 #include "window/window_manager.hpp"
 

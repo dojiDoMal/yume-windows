@@ -1,10 +1,10 @@
 #ifndef FRUSTUM_HPP
 #define FRUSTUM_HPP
 
-#include "../math.hpp"
-#include "../matrix4.hpp"
-#include "../vector3.hpp"
-#include "../vector4.hpp"
+#include "math/math.hpp"
+#include "math/matrix4.hpp"
+#include "math/vector3.hpp"
+#include "math/vector4.hpp"
 
 // A view frustum represented as its 6 clipping planes, extracted from a
 // combined view-projection matrix (Gribb & Hartmann method). Each plane is

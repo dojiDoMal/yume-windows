@@ -1,8 +1,8 @@
 #ifndef D3D12_SHADER_PROGRAM_HPP
 #define D3D12_SHADER_PROGRAM_HPP
 
-#include "../../../shader_program.hpp"
-#include "../../../shader_type.hpp"
+#include "assets/shader_program.hpp"
+#include "assets/shader_type.hpp"
 #include <d3d12.h>
 #include <string>
 #include <unordered_map>

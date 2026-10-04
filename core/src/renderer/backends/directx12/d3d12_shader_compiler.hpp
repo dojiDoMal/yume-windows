@@ -1,7 +1,7 @@
 #ifndef D3D12_SHADER_COMPILER_HPP
 #define D3D12_SHADER_COMPILER_HPP
 
-#include "shader_compiler.hpp"
+#include "assets/shader_compiler.hpp"
 #include <d3d12.h>
 #include <vector>
 

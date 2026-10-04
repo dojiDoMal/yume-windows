@@ -1,5 +1,5 @@
 #include "web_gl_shader_program.hpp"
-#include "shader_asset.hpp"
+#include "assets/shader_asset.hpp"
 
 WebGLShaderProgram::~WebGLShaderProgram() {
     if (programID != 0) {

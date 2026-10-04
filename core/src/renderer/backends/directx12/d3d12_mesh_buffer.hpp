@@ -1,7 +1,7 @@
 #ifndef D3D12_MESH_BUFFER_HPP
 #define D3D12_MESH_BUFFER_HPP
 
-#include "../../../mesh_buffer.hpp"
+#include "assets/mesh_buffer.hpp"
 #include <d3d12.h>
 #include <vector>
 

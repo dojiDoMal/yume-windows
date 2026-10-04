@@ -1,9 +1,9 @@
 #ifndef LIGHT_COMPONENT_HPP
 #define LIGHT_COMPONENT_HPP
 
-#include "../color.hpp"
-#include "../vector3.hpp"
-#include "component.hpp"
+#include "color.hpp"
+#include "math/vector3.hpp"
+#include "components/component.hpp"
 #include <cstdint>
 
 /// @brief Modelo de iluminação de uma luz.

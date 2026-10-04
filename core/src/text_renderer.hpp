@@ -2,7 +2,7 @@
 #define TEXT_RENDERER_HPP
 
 #include "color.hpp"
-#include "font_atlas.hpp"
+#include "assets/font_atlas.hpp"
 #include "renderer/renderer_backend.hpp"
 #include <string>
 

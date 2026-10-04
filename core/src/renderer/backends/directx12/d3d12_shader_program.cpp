@@ -4,7 +4,7 @@
 #include "d3d12_renderer_backend.hpp"
 #include "d3d12_shader_program.hpp"
 #include "log_macros.hpp"
-#include "shader_asset.hpp"
+#include "assets/shader_asset.hpp"
 #include <vector>
 
 struct ShaderBytecode {

@@ -58,7 +58,7 @@ if(EMSCRIPTEN OR IS_SWITCH)
     set(YUME_SCENE_COMPILER_CMD ${SCENE_COMPILER_EXE} CACHE STRING "scene_compiler command" FORCE)
     set(YUME_SCENE_COMPILER_DEPS "" CACHE STRING "scene_compiler deps" FORCE)
 else()
-    add_executable(scene_compiler ${YUME_ENGINE_ROOT}/core/src/scene_compiler.cpp)
+    add_executable(scene_compiler ${YUME_ENGINE_ROOT}/core/src/scene/scene_compiler.cpp)
     # scene_compiler is a standalone host tool (it does not link yume_core), so
     # it needs the engine source dir on its include path to find bundled headers
     # like <nlohmann/json.hpp> and "stb_image.h".
@@ -81,23 +81,24 @@ endif()
 # keep only what this build can use).
 # -----------------------------------------------------------------------------
 file(GLOB_RECURSE SOURCES "${YUME_ENGINE_ROOT}/core/src/*.cpp")
-list(REMOVE_ITEM SOURCES "${YUME_ENGINE_ROOT}/core/src/scene_compiler.cpp")
+list(REMOVE_ITEM SOURCES "${YUME_ENGINE_ROOT}/core/src/scene/scene_compiler.cpp")
 
 set(BACKENDS_DIR "${YUME_ENGINE_ROOT}/core/src/renderer/backends")
 if(EMSCRIPTEN)
-    foreach(BACKEND opengl vulkan directx12 egl)
+    foreach(BACKEND opengl vulkan directx12)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
 elseif(IS_SWITCH)
-    # Switch uses the libnx EGL/GLES backend. The desktop opengl backend pulls
-    # in GLEW (a desktop-only dep), and webgl/vulkan/directx12 don't apply here.
-    foreach(BACKEND webgl vulkan directx12 opengl)
+    # Switch uses the unified opengl backend, which selects the glad loader and
+    # OpenGL ES bits via `#ifdef __SWITCH__`. Only webgl/vulkan/directx12 are
+    # dropped here; the opengl backend is kept.
+    foreach(BACKEND webgl vulkan directx12)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
 else()
-    foreach(BACKEND webgl egl)
+    foreach(BACKEND webgl)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()

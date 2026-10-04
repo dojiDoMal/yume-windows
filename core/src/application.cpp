@@ -9,7 +9,7 @@
 #include "logger.hpp"
 #include "text_renderer.hpp"
 #include "timer.hpp"
-#include "world_object_manager.hpp"
+#include "scene/world_object_manager.hpp"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keycode.h>
@@ -74,9 +74,10 @@ bool Application::boot() {
     // WebGL is fixed to its own API regardless of project.conf.
     screenManager->setGraphicsApi(GraphicsAPI::WEBGL);
 #elif defined(__SWITCH__)
-    // Switch uses the libnx EGL/GL path; project.conf's api is ignored, but its
-    // srgb/vsync still apply to the EGL backend.
-    screenManager->setGraphicsApi(GraphicsAPI::EGL);
+    // Switch uses the libnx OpenGL ES path (EGL/glad under the hood); it reports
+    // GraphicsAPI::OPENGL like the desktop. project.conf's api is ignored, but
+    // its srgb/vsync still apply to the OpenGL backend.
+    screenManager->setGraphicsApi(GraphicsAPI::OPENGL);
     screenManager->setRendererConfig(rendererConfig);
 #else
     screenManager->setGraphicsApi(rendererConfig.api);

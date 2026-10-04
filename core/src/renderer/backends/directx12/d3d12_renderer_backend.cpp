@@ -1,12 +1,12 @@
 #define CLASS_NAME "D3D12RendererBackend"
-#include "../../../log_macros.hpp"
+#include "log_macros.hpp"
 
-#include "../../../components/mesh_renderer.hpp"
-#include "../../../math.hpp"
-#include "../../../mesh_buffer_factory.hpp"
-#include "../../../shader_compiler_factory.hpp"
-#include "../../../shader_program_factory.hpp"
-#include "../../../stb_image.h"
+#include "components/mesh_renderer.hpp"
+#include "math/math.hpp"
+#include "assets/mesh_buffer_factory.hpp"
+#include "assets/shader_compiler_factory.hpp"
+#include "assets/shader_program_factory.hpp"
+#include "assets/stb_image.h"
 #include "d3d12_mesh_buffer.hpp"
 #include "d3d12_renderer_backend.hpp"
 #include "d3d12_shader_program.hpp"
@@ -87,8 +87,6 @@ D3D12RendererBackend::~D3D12RendererBackend() {
 }
 
 bool D3D12RendererBackend::init() { return true; }
-
-bool D3D12RendererBackend::initWindowContext() { return true; }
 
 bool D3D12RendererBackend::init(SDL_Window* window) {
 

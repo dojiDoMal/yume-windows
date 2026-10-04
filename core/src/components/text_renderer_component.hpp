@@ -1,9 +1,9 @@
 #ifndef TEXT_RENDERER_COMPONENT_HPP
 #define TEXT_RENDERER_COMPONENT_HPP
 
-#include "../font_atlas.hpp"
-#include "../text_renderer.hpp"
-#include "component.hpp"
+#include "assets/font_atlas.hpp"
+#include "text_renderer.hpp"
+#include "components/component.hpp"
 #include <memory>
 
 /**

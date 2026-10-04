@@ -5,8 +5,8 @@
 #include <SDL2/SDL.h>
 #include <emscripten.h>
 
-#include "math.hpp"
-#include "stb_image.h"
+#include "math/math.hpp"
+#include "assets/stb_image.h"
 
 GraphicsAPI WebGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::WEBGL; }
 
@@ -35,13 +35,6 @@ bool WebGLRendererBackend::init() {
 }
 
 void WebGLRendererBackend::clear() { glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); }
-
-bool WebGLRendererBackend::initWindowContext() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    return true;
-}
 
 void WebGLRendererBackend::draw(const Mesh& mesh) {
     GLint currentProgram;

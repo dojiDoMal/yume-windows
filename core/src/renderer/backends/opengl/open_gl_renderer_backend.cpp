@@ -1,24 +1,35 @@
 #define CLASS_NAME "OpenGLRendererBackend"
-#include "../../../log_macros.hpp"
+#include "log_macros.hpp"
 
-#include "../../../color.hpp"
-#include "../../../components/mesh_renderer.hpp"
-#include "../../../components/sprite_renderer.hpp"
-#include "../../../material.hpp"
-#include "../../../math.hpp"
-#include "../../../stb_image.h"
-#include "mesh_buffer_factory.hpp"
+#include "color.hpp"
+#include "components/mesh_renderer.hpp"
+#include "components/sprite_renderer.hpp"
+#include "assets/material.hpp"
+#include "math/math.hpp"
+#include "assets/stb_image.h"
+#include "assets/mesh_buffer_factory.hpp"
 #include "open_gl_renderer_backend.hpp"
-#include "shader_compiler_factory.hpp"
-#include "shader_program_factory.hpp"
+#include "assets/shader_compiler_factory.hpp"
+#include "assets/shader_program_factory.hpp"
+#ifdef __SWITCH__
+#include <glad/glad.h>
+#include <SDL.h>
+#else
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
+#endif
 #include <fstream>
 #include <sstream>
 
 GraphicsAPI OpenGLRendererBackend::getGraphicsAPI() const { return GraphicsAPI::OPENGL; }
 
-std::string OpenGLRendererBackend::getShaderExtension() const { return ".glsl"; }
+std::string OpenGLRendererBackend::getShaderExtension() const {
+#ifdef __SWITCH__
+    return ".nxs";
+#else
+    return ".glsl";
+#endif
+}
 
 OpenGLRendererBackend::~OpenGLRendererBackend() {
     if (instanceSSBO)
@@ -65,9 +76,19 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
     // which caps the FPS to the monitor's refresh rate (60Hz).
     SDL_GLContext glContext = SDL_GL_CreateContext(window);
     if (!glContext) {
-        LOG_ERROR("Failed to create OpenGL context!");
+        LOG_ERROR(std::string("Failed to create OpenGL context: ") + SDL_GetError());
         return false;
     }
+
+#ifdef __SWITCH__
+    // On the Switch the GL entry points are resolved at runtime through glad,
+    // using SDL's EGL loader. Desktop uses GLEW instead (see init()).
+    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
+        LOG_ERROR(std::string("Failed to load OpenGL routines using glad: ") + SDL_GetError());
+        SDL_GL_DeleteContext(glContext);
+        return false;
+    }
+#endif
 
     // Vsync from project.conf: 1 = cap to refresh rate, 0 = uncapped.
     SDL_GL_SetSwapInterval(vsyncEnabled ? 1 : 0);
@@ -76,6 +97,9 @@ bool OpenGLRendererBackend::init(SDL_Window* window) {
 };
 
 bool OpenGLRendererBackend::init() {
+#ifndef __SWITCH__
+    // Desktop resolves GL entry points through GLEW. The Switch loads them via
+    // glad in init(SDL_Window*) before this runs, so there is nothing to do here.
     GLenum err = glewInit();
     printf("OpenGL: %s | GPU: %s\n", glGetString(GL_VERSION), glGetString(GL_RENDERER));
 
@@ -84,6 +108,7 @@ bool OpenGLRendererBackend::init() {
         LOG_ERROR("GLEW initialization failed: " + glewErr);
         return false;
     }
+#endif
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -136,14 +161,6 @@ void OpenGLRendererBackend::clear(Camera* camera) {
 
     glClearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-bool OpenGLRendererBackend::initWindowContext() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
-    return true;
 }
 
 void OpenGLRendererBackend::draw(const Mesh& mesh) {
