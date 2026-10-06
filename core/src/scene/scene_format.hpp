@@ -90,7 +90,13 @@ enum class ComponentType : uint8_t {
     CAMERA = 3,
     LIGHT = 4,
     TEXT_RENDERER = 5,
-    LOD_GROUP = 6
+    LOD_GROUP = 6,
+    SCRIPT = 7
+};
+
+/// @brief Dados do componente de script: caminho do arquivo .ys.
+struct ScriptComponentData {
+    char scriptPath[256]; ///< Caminho do arquivo YumeScript (.ys) a executar.
 };
 
 /// @brief Tipo de fonte usada por um renderer de texto. MSDF = multi-channel signed distance field.
@@ -136,9 +142,9 @@ struct LodLevelData {
 
 /// @brief Dados do componente de grupo de LOD no formato de disco.
 struct LodGroupData {
-    uint8_t levelCount;                ///< Número de níveis em uso.
+    uint8_t levelCount;                  ///< Número de níveis em uso.
     LodLevelData levels[MAX_LOD_LEVELS]; ///< Níveis de detalhe.
-    MaterialData material;             ///< Material compartilhado pelos níveis.
+    MaterialData material;               ///< Material compartilhado pelos níveis.
 };
 
 /**
@@ -171,6 +177,7 @@ struct ComponentData {
         LightComponentData light;
         TextRendererComponentData textRenderer;
         LodGroupData lodGroup;
+        ScriptComponentData script;
     };
 };
 
@@ -212,8 +219,8 @@ struct SceneHeader {
  * bloco de objetos separadamente.
  */
 struct CompiledScene {
-    uint32_t worldObjectCount = 0;              ///< Número de objetos.
-    std::vector<WorldObjectData> worldObjects;  ///< Os objetos da cena.
+    uint32_t worldObjectCount = 0;             ///< Número de objetos.
+    std::vector<WorldObjectData> worldObjects; ///< Os objetos da cena.
 };
 
 #endif

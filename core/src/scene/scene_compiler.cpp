@@ -11,8 +11,8 @@
  * @see scene_format.hpp, SceneLoader
  */
 #include "color.hpp"
-#include "scene/scene_format.hpp"
 #include "math/vector3.hpp"
+#include "scene/scene_format.hpp"
 #include <array>
 #include <fstream>
 #include <iostream>
@@ -22,9 +22,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "assets/stb_image.h"
 
-// TODO: Cores estão sem validação de faixa/tamanho pra cores. Se o JSON  
-// tiver menos de 4 elementos ou valores fora de 0–255, operator[] do 
-// std::array não checa  limites e valores acima de 255 passam de 1.0. 
+// TODO: Cores estão sem validação de faixa/tamanho pra cores. Se o JSON
+// tiver menos de 4 elementos ou valores fora de 0–255, operator[] do
+// std::array não checa  limites e valores acima de 255 passam de 1.0.
 // Se quiser robustez, dá pra usar .at() ou um clamp.
 
 using json = nlohmann::json;
@@ -51,7 +51,8 @@ void compileLodGroup(ComponentData& compData, const json& comp) {
                   sizeof(compData.lodGroup.material.vertexShaderPath), "%s", vertPath.c_str());
     std::snprintf(compData.lodGroup.material.fragmentShaderPath,
                   sizeof(compData.lodGroup.material.fragmentShaderPath), "%s", fragPath.c_str());
-    compData.lodGroup.material.color = {color[0]/255.0f, color[1]/255.0f, color[2]/255.0f, color[3]/255.0f};
+    compData.lodGroup.material.color = {color[0] / 255.0f, color[1] / 255.0f, color[2] / 255.0f,
+                                        color[3] / 255.0f};
 }
 
 void compileMeshRenderer(ComponentData& compData, const json& comp) {
@@ -72,7 +73,8 @@ void compileMeshRenderer(ComponentData& compData, const json& comp) {
                   sizeof(compData.meshRenderer.material.fragmentShaderPath), "%s",
                   fragPath.c_str());
 
-    compData.meshRenderer.material.color = {color[0]/255.0f, color[1]/255.0f, color[2]/255.0f, color[3]/255.0f};
+    compData.meshRenderer.material.color = {color[0] / 255.0f, color[1] / 255.0f, color[2] / 255.0f,
+                                            color[3] / 255.0f};
 }
 
 void compileSpriteRenderer(ComponentData& compData, const json& comp) {
@@ -107,14 +109,15 @@ void compileSpriteRenderer(ComponentData& compData, const json& comp) {
                   sizeof(compData.spriteRenderer.material.fragmentShaderPath), "%s",
                   fragPath.c_str());
 
-    compData.spriteRenderer.material.color = {color[0]/255.0f, color[1]/255.0f, color[2]/255.0f, color[3]/255.0f};
+    compData.spriteRenderer.material.color = {color[0] / 255.0f, color[1] / 255.0f,
+                                              color[2] / 255.0f, color[3] / 255.0f};
 }
 
 void compileCamera(ComponentData& compData, const json& comp) {
     compData.type = ComponentType::CAMERA;
 
     for (int i = 0; i < 4; i++)
-        compData.camera.background_color[i] = comp["background_color"][i].get<float>()/255.0f;
+        compData.camera.background_color[i] = comp["background_color"][i].get<float>() / 255.0f;
 
     compData.camera.fov = comp["fov"];
 
@@ -190,7 +193,14 @@ void compileLight(ComponentData& compData, const json& comp) {
     compData.light.intensity = comp["intensity"];
 
     for (int i = 0; i < 4; i++)
-        compData.light.color[i] = comp["color"][i].get<float>()/255.0f;
+        compData.light.color[i] = comp["color"][i].get<float>() / 255.0f;
+}
+
+void compileScript(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::SCRIPT;
+    std::string path = comp.value("path", std::string());
+    std::snprintf(compData.script.scriptPath, sizeof(compData.script.scriptPath), "%s",
+                  path.c_str());
 }
 
 void compileWorldObjects(CompiledScene& scene, const json& j) {
@@ -252,6 +262,8 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
                     compileTextRenderer(woData.components[j], comp);
                 } else if (type == "LOD_GROUP") {
                     compileLodGroup(woData.components[j], comp);
+                } else if (type == "SCRIPT") {
+                    compileScript(woData.components[j], comp);
                 }
             }
         }

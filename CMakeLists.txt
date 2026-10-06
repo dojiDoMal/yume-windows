@@ -83,12 +83,32 @@ endif()
 file(GLOB_RECURSE SOURCES "${YUME_ENGINE_ROOT}/core/src/*.cpp")
 list(REMOVE_ITEM SOURCES "${YUME_ENGINE_ROOT}/core/src/scene/scene_compiler.cpp")
 
+# The YumeScript test harness is a standalone host tool with its own main(); it
+# must not be compiled into the engine library (would clash with the project's
+# main() and pull test-only code into yume_core). Drop the whole tests dir.
+file(GLOB_RECURSE _ys_test_sources "${YUME_ENGINE_ROOT}/core/src/yumescript/tests/*.cpp")
+if(_ys_test_sources)
+    list(REMOVE_ITEM SOURCES ${_ys_test_sources})
+endif()
+
 set(BACKENDS_DIR "${YUME_ENGINE_ROOT}/core/src/renderer/backends")
+
+# Per-API SDL2 display backends. Each mirrors a renderer backend: it is the only
+# place that touches the SDL calls specific to one API (SDL_GL_* / SDL_Vulkan_*
+# / SDL_syswm). Drop them on platforms that lack the API so, e.g., no Vulkan or
+# D3D12 window code ends up in the Switch/Web/3DS build. The GL display backend
+# is kept wherever SDL is used.
+set(MML_SDL2_DIR "${YUME_ENGINE_ROOT}/core/src/window/mml/sdl2")
+
 if(EMSCRIPTEN)
     foreach(BACKEND opengl vulkan directx12)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
+    # Web keeps only the GL display backend.
+    list(REMOVE_ITEM SOURCES
+        "${MML_SDL2_DIR}/sdl2_vulkan_display_backend.cpp"
+        "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
 elseif(IS_SWITCH)
     # Switch uses the unified opengl backend, which selects the glad loader and
     # OpenGL ES bits via `#ifdef __SWITCH__`. Only webgl/vulkan/directx12 are
@@ -97,11 +117,20 @@ elseif(IS_SWITCH)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
+    # Switch keeps only the GL display backend.
+    list(REMOVE_ITEM SOURCES
+        "${MML_SDL2_DIR}/sdl2_vulkan_display_backend.cpp"
+        "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
 else()
     foreach(BACKEND webgl)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
     endforeach()
+    # Native desktop keeps GL + Vulkan everywhere; the D3D12 display backend is
+    # Windows-only (SDL_syswm.h win member).
+    if(NOT WIN32)
+        list(REMOVE_ITEM SOURCES "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
+    endif()
 endif()
 
 add_library(yume_core STATIC ${SOURCES})
@@ -111,6 +140,26 @@ add_library(yume_core STATIC ${SOURCES})
 # code can gate on it too.
 target_include_directories(yume_core PUBLIC ${YUME_ENGINE_ROOT}/core/src)
 target_compile_definitions(yume_core PUBLIC $<$<CONFIG:Debug>:YUME_DEBUG>)
+
+# -----------------------------------------------------------------------------
+# YumeScript test harness (host tool). Validates lexer+parser+interpreter end to
+# end without the engine runtime. Native builds only (not Emscripten/Switch).
+# It links yume_core only for the yumescript sources it already contains; it has
+# no graphics dependencies of its own. Build with: --target yumescript_test.
+# -----------------------------------------------------------------------------
+if(NOT EMSCRIPTEN AND NOT IS_SWITCH)
+    # Compile the yumescript sources directly into the harness so it stays truly
+    # standalone -- no yume_core link, no SDL2/GLEW/Vulkan pulled in. The
+    # language core has no engine dependencies, which is exactly what Phase 1
+    # wants to validate.
+    file(GLOB _ys_core_sources "${YUME_ENGINE_ROOT}/core/src/yumescript/*.cpp")
+    add_executable(yumescript_test
+        ${YUME_ENGINE_ROOT}/core/src/yumescript/tests/harness_main.cpp
+        ${_ys_core_sources})
+    target_include_directories(yumescript_test PRIVATE ${YUME_ENGINE_ROOT}/core/src)
+    set_target_properties(yumescript_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${YUME_ENGINE_ROOT}/tools)
+endif()
 
 # -----------------------------------------------------------------------------
 # Platform-specific dependencies and link line for yume_core. Each file owns one

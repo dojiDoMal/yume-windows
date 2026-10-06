@@ -3,28 +3,38 @@
 
 #include "input/i_input.hpp"
 
+class MultimediaLayer;
+class AudioBackend;
+class DisplayBackend;
+
 namespace Yume {
 
 /**
  * @brief Agrega os subsistemas compartilhados do engine em um único contexto.
  *
- * Dá acesso centralizado a serviços de longa duração (hoje, o sistema de
- * input) para quem precisar deles durante a execução. É criado e mantido pela
- * Application.
+ * Dá acesso centralizado a serviços de longa duração para quem precisar deles
+ * durante a execução. Hoje gira em torno da MultimediaLayer — a camada que
+ * agrupa display, input e áudio sobre o mesmo backend de plataforma. É criado e
+ * mantido pela Application, que também é dona da MultimediaLayer.
  */
 class Context {
   public:
     /**
-     * @brief Constrói o contexto com os subsistemas fornecidos.
-     * @param input Sistema de input a ser exposto (não assume a posse).
+     * @brief Constrói o contexto sobre a camada de multimídia fornecida.
+     * @param multimedia Camada de multimídia ativa (não assume a posse; a
+     *        Application continua dona dela).
      */
-    Context(IInput* input);
+    explicit Context(MultimediaLayer* multimedia);
     ~Context();
 
-    IInput* input; ///< Sistema de input ativo.
+    MultimediaLayer* multimedia; ///< Camada de multimídia ativa (display + input + áudio).
 
     /** @brief Retorna o sistema de input como referência. */
     IInput& getInputSystem();
+    /** @brief Retorna o backend de áudio como referência. */
+    AudioBackend& getAudioSystem();
+    /** @brief Retorna o backend de display como referência. */
+    DisplayBackend& getDisplaySystem();
 };
 } // namespace Yume
 

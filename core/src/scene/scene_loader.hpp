@@ -25,9 +25,12 @@
 class SceneLoader {
   private:
     RendererBackend* rendererBackend = nullptr;
-    std::unordered_map<std::string, std::shared_ptr<Mesh>> meshCache;         ///< Cache de malhas por caminho.
-    std::unordered_map<std::string, std::shared_ptr<Material>> materialCache; ///< Cache de materiais.
-    std::unordered_map<std::string, std::shared_ptr<FontAtlas>> fontAtlasCache; ///< Cache de atlas de fonte.
+    std::unordered_map<std::string, std::shared_ptr<Mesh>>
+        meshCache; ///< Cache de malhas por caminho.
+    std::unordered_map<std::string, std::shared_ptr<Material>>
+        materialCache; ///< Cache de materiais.
+    std::unordered_map<std::string, std::shared_ptr<FontAtlas>>
+        fontAtlasCache; ///< Cache de atlas de fonte.
 
     std::shared_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
 
@@ -49,6 +52,7 @@ class SceneLoader {
     void loadLightComponent(WorldObject* obj, const ComponentData& comp);
     void loadTextRendererComponent(WorldObject* obj, const ComponentData& comp);
     void loadLodGroupComponent(WorldObject* obj, const ComponentData& comp);
+    void loadScriptComponent(WorldObject* obj, const ComponentData& comp);
 
   public:
     SceneLoader();

@@ -1,16 +1,16 @@
 #include "multimedia_layer_factory.hpp"
 
 #ifdef __3DS__
-#include "3ds/n3ds_layer.hpp"
+#include "3ds/n3ds_multimedia_layer.hpp"
 #else
-#include "sdl2/sdl2_layer.hpp"
+#include "sdl2/sdl2_multimedia_layer.hpp"
 #endif // __3DS__
 
 MultimediaLayer* MultimediaLayerFactory::create(const GraphicsAPI& api) {
     switch (api) {
-        case GraphicsAPI::CITRO3D:
+    case GraphicsAPI::CITRO3D:
 #ifdef __3DS__
-        return new N3DSLayer();
+        return new N3DSMultimediaLayer();
 #else
         return nullptr;
 #endif // __3DS__
@@ -21,7 +21,7 @@ MultimediaLayer* MultimediaLayerFactory::create(const GraphicsAPI& api) {
 #ifdef __3DS__
         return nullptr;
 #else
-        return new SDL2Layer();
+        return new SDL2MultimediaLayer(api);
 #endif // __3DS__
     default:
         return nullptr;

@@ -1,26 +1,30 @@
 #ifndef RENDERER_BACKEND_HPP
 #define RENDERER_BACKEND_HPP
 
+#include "assets/font_atlas.hpp"
+#include "assets/mesh.hpp"
+#include "assets/shader_program.hpp"
 #include "color.hpp"
 #include "components/camera.hpp"
 #include "components/light.hpp"
-#include "assets/font_atlas.hpp"
 #include "graphics_api.hpp"
 #include "math/matrix4.hpp"
-#include "assets/mesh.hpp"
-#include "assets/shader_program.hpp"
 #include "scene/sprite.hpp"
 #include "scene/world_object.hpp"
 #include <memory>
 #include <vector>
 
-
-struct SDL_Window;
+class DisplayBackend;
 
 class RendererBackend {
   protected:
     Camera* mainCamera = nullptr;
     std::vector<Light*> lights;
+
+    // Window/platform services (GL context, Vulkan surface, native handle).
+    // Supplied by the host at init(window, display) and used by backends that
+    // need the window without ever touching SDL directly. Non-owning.
+    DisplayBackend* displayBackend = nullptr;
 
     // Per-frame draw statistics: what was actually submitted to the GPU this
     // frame after culling. Reset at the start of renderWorldObjects and
@@ -63,8 +67,15 @@ class RendererBackend {
     virtual unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) = 0;
     virtual void drawSprite(const Sprite& sprite) = 0;
     virtual bool init() = 0;
-    virtual bool init(SDL_Window* window) = 0;
-    virtual void present(SDL_Window* window) = 0;
+    /**
+     * @brief Inicializa o backend contra a janela já criada.
+     * @param window  Handle opaco da janela (ex.: SDL_Window*), nunca um tipo SDL.
+     * @param display Serviços de janela/plataforma (contexto GL, surface Vulkan,
+     *                handle nativo). O backend guarda a referência para usar no
+     *                present e no cleanup.
+     */
+    virtual bool init(void* window, DisplayBackend& display) = 0;
+    virtual void present(void* window) = 0;
     virtual void bindCamera(Camera* camera) = 0;
     virtual void applyMaterial(Material* material) = 0;
     virtual void clear(Camera* camera) = 0;
@@ -77,7 +88,6 @@ class RendererBackend {
     virtual std::unique_ptr<MeshBuffer> createMeshBuffer() = 0;
     virtual void onCameraSet() = 0;
     virtual void setUniforms(ShaderProgram* shaderProgram) = 0;
-    virtual unsigned int getRequiredWindowFlags() const = 0;
 
     virtual void renderWorldObjects(const std::vector<WorldObject*>& objects,
                                     const std::vector<Light*>& lights) = 0;

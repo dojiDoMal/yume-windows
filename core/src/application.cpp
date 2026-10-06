@@ -5,11 +5,11 @@
 
 #include "color.hpp"
 #include "components/text_renderer_component.hpp"
-#include "input/i_input_factory.hpp"
 #include "logger.hpp"
 #include "scene/world_object_manager.hpp"
 #include "text_renderer.hpp"
 #include "timer.hpp"
+#include "window/mml/multimedia_layer_factory.hpp"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keycode.h>
@@ -26,11 +26,10 @@
 
 namespace Yume {
 
-Application::Application() {
-    // DesktopInput today; the factory abstracts the per-platform choice.
-    inputMan.reset(Yume::IInputFactory::create());
-    engine = std::make_unique<Context>(inputMan.get());
-}
+// The engine Context (and the input/audio/display it exposes) is built in
+// boot(), once the MultimediaLayer is up — it needs the resolved GraphicsAPI to
+// pick a platform backend, which only happens after project.conf is loaded.
+Application::Application() = default;
 
 Application::~Application() = default;
 
@@ -58,21 +57,44 @@ bool Application::boot() {
 
     screenManager = std::make_unique<DisplayManager>();
 
+    // Resolve the graphics API once: WebGL/Switch force their own regardless of
+    // project.conf; the native desktop honors the file. The same API drives
+    // both the DisplayManager (renderer backend) and the MultimediaLayer
+    // factory (platform media backends), so compute it here and reuse it.
 #if defined(PLATFORM_WEBGL)
-    // WebGL is fixed to its own API regardless of project.conf.
-    screenManager->setGraphicsApi(GraphicsAPI::WEBGL);
+    const GraphicsAPI graphicsApi = GraphicsAPI::WEBGL;
+    screenManager->setGraphicsApi(graphicsApi);
 #elif defined(__SWITCH__)
     // Switch uses the libnx OpenGL ES path (EGL/glad under the hood); it reports
     // GraphicsAPI::OPENGL like the desktop. project.conf's api is ignored, but
     // its srgb/vsync still apply to the OpenGL backend.
-    screenManager->setGraphicsApi(GraphicsAPI::OPENGL);
+    const GraphicsAPI graphicsApi = GraphicsAPI::OPENGL;
+    screenManager->setGraphicsApi(graphicsApi);
     screenManager->setRendererConfig(rendererConfig);
 #else
-    screenManager->setGraphicsApi(rendererConfig.api);
+    const GraphicsAPI graphicsApi = rendererConfig.api;
+    screenManager->setGraphicsApi(graphicsApi);
     screenManager->setRendererConfig(rendererConfig);
 #endif
 
-    if (!screenManager->init(winDesc)) {
+    // The MultimediaLayer is the umbrella over display + input + audio and owns
+    // the platform media lifecycle (e.g. SDL_Init/SDL_Quit). Bring it up before
+    // the DisplayManager, which borrows its DisplayBackend to create the window.
+    multimedia.reset(MultimediaLayerFactory::create(graphicsApi));
+    if (!multimedia) {
+        LOG_ERROR("Failed to create multimedia layer!");
+        return false;
+    }
+    if (!multimedia->init()) {
+        LOG_ERROR("Failed to initialize multimedia layer!");
+        return false;
+    }
+
+    // Expose the shared subsystems (input/audio/display) through the Context now
+    // that the multimedia layer is up.
+    engine = std::make_unique<Context>(multimedia.get());
+
+    if (!screenManager->init(multimedia->display(), winDesc)) {
         LOG_ERROR("DisplayManager init failed");
         return false;
     }
@@ -89,10 +111,33 @@ bool Application::boot() {
         sceneManager->loadScene("main");
     }
 
+    // Component start() hooks run once the scene is fully built, before any
+    // per-frame work and before onInit, so a ScriptComponent can read its
+    // owner's Transform and bind its script's start()/update().
+    startSceneComponents();
+
     // Project-specific setup runs after the engine is fully up and the scene is
     // loaded, so onInit can safely grab objects from the active scene.
     onInit();
     return true;
+}
+
+void Application::startSceneComponents() {
+    Scene* scene = sceneManager ? sceneManager->getActiveScene() : nullptr;
+    if (!scene)
+        return;
+    for (auto& obj : scene->getObjectManager()->getObjects()) {
+        obj->startComponents();
+    }
+}
+
+void Application::updateSceneComponents(float deltaTime) {
+    Scene* scene = sceneManager ? sceneManager->getActiveScene() : nullptr;
+    if (!scene)
+        return;
+    for (auto& obj : scene->getObjectManager()->getObjects()) {
+        obj->updateComponents(deltaTime);
+    }
 }
 
 void Application::updateDebugOverlay(float deltaTime) {
@@ -177,6 +222,11 @@ void Application::mainLoop() {
         if (engine->getInputSystem().getQuitEvent())
             running = false;
 
+        // Component update() hooks (e.g. a ScriptComponent running a .ys)
+        // run before the project's onUpdate, so project code can react to or
+        // override whatever the scripts produced this frame.
+        updateSceneComponents(deltaTime);
+
         // Project-specific per-frame logic (e.g. rotate the cube).
         onUpdate(deltaTime);
 
@@ -191,12 +241,17 @@ void Application::mainLoop() {
 }
 
 void Application::shutdown() {
-    // The DisplayManager owns the multimedia layer, which owns the SDL
-    // lifecycle (SDL_Init in SDL2Layer::init / SDL_Quit in SDL2Layer::end).
-    // Destroy it here so SDL is torn down deterministically before anything
-    // else (e.g. romfsExit on the Switch) runs. Do NOT call SDL_Quit() here:
-    // that would double-finalize SDL.
+    // Tear down in the right order so SDL is finalized deterministically before
+    // anything else (e.g. romfsExit on the Switch):
+    //  1) Context is non-owning; drop it first so nothing reaches a dead layer.
+    //  2) DisplayManager destroys the window through the MultimediaLayer's
+    //     DisplayBackend, so it must go before the layer.
+    //  3) MultimediaLayer runs SDL_Quit in its destructor (end()). Resetting it
+    //     here makes that happen now rather than at Application destruction.
+    // Do NOT call SDL_Quit() here: that would double-finalize SDL.
+    engine.reset();
     screenManager.reset();
+    multimedia.reset();
 #ifdef __SWITCH__
     romfsExit();
 #endif

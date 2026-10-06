@@ -2,10 +2,11 @@
 #define RENDERER_HPP
 
 #include "graphics_api.hpp"
-#include "scene/scene.hpp"
 #include "renderer/renderer_backend.hpp"
+#include "scene/scene.hpp"
 
 class Material;
+class DisplayBackend;
 
 class Renderer {
   private:
@@ -16,9 +17,9 @@ class Renderer {
     void setRendererBackend(RendererBackend* backend);
     RendererBackend* getRendererBackend();
     bool initBackend(const GraphicsAPI& graphicsApi);
-    bool initWindow(SDL_Window* win);
+    bool initWindow(void* window, DisplayBackend& display);
     void render(const Scene& scene);
-    void present(SDL_Window* window);
+    void present(void* window);
 };
 
 #endif

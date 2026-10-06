@@ -7,7 +7,7 @@
 #
 #   *.vxs / *.pxs  (HLSL)  -> SPIR-V -> GLSL/.nxs  (+ .cso DXIL on Windows)
 #   *.scn          (JSON)  -> *.scnb (binary scene)
-#   *.obj, project.conf    -> copied verbatim
+#   *.obj, *.ys, project.conf -> copied verbatim
 #
 # All artifacts land next to the executable in the project's build/<cfg> dir,
 # which the engine uses as its working directory, so every bare relative path
@@ -232,7 +232,11 @@ function(yume_copy_assets OUT_VAR)
     set(_sources)
     file(GLOB _objs "${ARG_PROJECT_DIR}/*.obj")
     file(GLOB _pngs "${ARG_PROJECT_DIR}/*.png")
-    list(APPEND _sources ${_objs} ${_pngs})
+    # YumeScript sources are copied verbatim (Phase 1: parsed at runtime by the
+    # ScriptComponent). The .scn only stores the .ys path, so the file must sit
+    # next to the executable like .obj / project.conf.
+    file(GLOB _ys "${ARG_PROJECT_DIR}/*.ys")
+    list(APPEND _sources ${_objs} ${_pngs} ${_ys})
     if(EXISTS "${ARG_PROJECT_DIR}/project.conf")
         list(APPEND _sources "${ARG_PROJECT_DIR}/project.conf")
     endif()

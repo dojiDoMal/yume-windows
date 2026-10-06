@@ -4,19 +4,20 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "assets/tinyobjloader/tiny_obj_loader.h"
 
+#include "assets/material.hpp"
+#include "assets/shader_asset.hpp"
+#include "assets/stb_image.h"
 #include "components/camera.hpp"
 #include "components/light.hpp"
 #include "components/lod_group.hpp"
 #include "components/mesh_renderer.hpp"
+#include "components/script_component.hpp"
 #include "components/sprite_renderer.hpp"
 #include "components/text_renderer_component.hpp"
-#include "assets/material.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene/scene_format.hpp"
 #include "scene/scene_loader.hpp"
-#include "assets/shader_asset.hpp"
 #include "scene/skybox.hpp"
-#include "assets/stb_image.h"
 #include <fstream>
 
 SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
@@ -357,6 +358,15 @@ std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool
     return mesh;
 }
 
+void SceneLoader::loadScriptComponent(WorldObject* obj, const ComponentData& comp) {
+    std::string path = comp.script.scriptPath;
+    if (path.empty()) {
+        LOG_ERROR("SCRIPT component with empty path; skipping");
+        return;
+    }
+    obj->addComponent(std::make_unique<ScriptComponent>(path));
+}
+
 void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene) {
     LOG_INFO("Loading " + std::to_string(scene->worldObjectCount) + " world objects");
 
@@ -401,6 +411,10 @@ void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledSc
             case ComponentType::LOD_GROUP:
                 LOG_INFO("  - Loading LOD_GROUP component");
                 loadLodGroupComponent(obj, comp);
+                break;
+            case ComponentType::SCRIPT:
+                LOG_INFO("  - Loading SCRIPT component");
+                loadScriptComponent(obj, comp);
                 break;
             default:
                 break;

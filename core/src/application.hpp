@@ -7,6 +7,7 @@
 #include "renderer_config.hpp"
 #include "scene/scene_manager.hpp"
 #include "window/display_manager.hpp"
+#include "window/mml/multimedia_layer.hpp"
 #include "window/window_desc.hpp"
 
 #include <memory>
@@ -84,12 +85,36 @@ class Application {
      */
     void updateDebugOverlay(float deltaTime);
 
+    /**
+     * @brief Chama Component::start() em todos os objetos da cena ativa.
+     *
+     * Rodado uma vez após a cena carregar (antes de onInit), para que
+     * componentes com inicialização própria — como o ScriptComponent — preparem
+     * seu estado com o objeto já completo.
+     */
+    void startSceneComponents();
+
+    /**
+     * @brief Chama Component::update(dt) em todos os objetos da cena ativa.
+     * @param deltaTime Tempo do frame, em segundos.
+     *
+     * Rodado a cada frame no mainLoop, antes da renderização.
+     */
+    void updateSceneComponents(float deltaTime);
+
     RendererConfig rendererConfig;
+
+    // Declared before screenManager so it outlives it: the DisplayManager
+    // destroys the window through multimedia->display() in its destructor, and
+    // the MultimediaLayer owns both that backend and the SDL lifecycle. Members
+    // are destroyed in reverse declaration order, so screenManager tears down
+    // first, then multimedia (SDL_Quit) last.
+    std::unique_ptr<MultimediaLayer> multimedia;
+
     std::unique_ptr<DisplayManager> screenManager;
     std::unique_ptr<SceneManager> sceneManager;
     RendererBackend* rendererBackend = nullptr;
 
-    std::unique_ptr<IInput> inputMan;
     std::unique_ptr<Context> engine;
 };
 

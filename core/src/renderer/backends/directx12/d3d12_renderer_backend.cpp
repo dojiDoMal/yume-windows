@@ -1,25 +1,22 @@
 #define CLASS_NAME "D3D12RendererBackend"
 #include "log_macros.hpp"
 
-#include "components/mesh_renderer.hpp"
-#include "math/math.hpp"
 #include "assets/mesh_buffer_factory.hpp"
 #include "assets/shader_compiler_factory.hpp"
 #include "assets/shader_program_factory.hpp"
 #include "assets/stb_image.h"
+#include "components/mesh_renderer.hpp"
 #include "d3d12_mesh_buffer.hpp"
 #include "d3d12_renderer_backend.hpp"
 #include "d3d12_shader_program.hpp"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
+#include "math/math.hpp"
+#include "window/mml/display_backend.hpp"
 #include <fstream>
 #include <sstream>
 
 GraphicsAPI D3D12RendererBackend::getGraphicsAPI() const { return GraphicsAPI::DIRECTX12; }
 
 std::string D3D12RendererBackend::getShaderExtension() const { return ".cso"; }
-
-unsigned int D3D12RendererBackend::getRequiredWindowFlags() const { return 0; }
 
 std::unique_ptr<ShaderProgram> D3D12RendererBackend::createShaderProgram() {
     return ShaderProgramFactory::create(getGraphicsAPI(), this);
@@ -88,20 +85,17 @@ D3D12RendererBackend::~D3D12RendererBackend() {
 
 bool D3D12RendererBackend::init() { return true; }
 
-bool D3D12RendererBackend::init(SDL_Window* window) {
+bool D3D12RendererBackend::init(void* window, DisplayBackend& display) {
 
     if (!window) {
         LOG_ERROR("Window is null!");
         return false;
     }
+    displayBackend = &display;
 
-    SDL_SysWMinfo wmInfo;
-    SDL_VERSION(&wmInfo.version);
-    if (!SDL_GetWindowWMInfo(window, &wmInfo)) {
-        LOG_ERROR("Failed to get window info!");
-        return false;
-    }
-    setHwnd(wmInfo.info.win.window);
+    // The native HWND comes from the display backend (the only side that calls
+    // SDL_GetWindowWMInfo), so this file no longer depends on SDL.
+    setHwnd(displayBackend->getNativeWindowHandle(window));
 
     if (!hwnd) {
         LOG_ERROR("HWND is null!");
@@ -465,7 +459,8 @@ unsigned int D3D12RendererBackend::createCubemapTexture(const std::vector<std::s
 void D3D12RendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderProgram,
                                         unsigned int textureID) {}
 
-void D3D12RendererBackend::present(SDL_Window* window) {
+void D3D12RendererBackend::present(void* window) {
+    (void)window; // D3D12 presents through its DXGI swapchain, not the window.
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Transition.pResource = renderTargets[frameIndex];

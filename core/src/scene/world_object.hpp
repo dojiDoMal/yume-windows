@@ -1,10 +1,10 @@
 #ifndef WORLD_OBJECT_HPP
 #define WORLD_OBJECT_HPP
 
-#include "components/component.hpp"
 #include "assets/mesh.hpp"
-#include "scene/sprite.hpp"
+#include "components/component.hpp"
 #include "components/transform.hpp"
+#include "scene/sprite.hpp"
 #include <memory>
 #include <typeinfo>
 #include <vector>
@@ -28,8 +28,8 @@
  */
 class WorldObject {
   private:
-    Transform transform;                                 ///< Transformação do objeto.
-    std::vector<std::unique_ptr<Component>> components;   ///< Componentes anexados (posse exclusiva).
+    Transform transform;                                ///< Transformação do objeto.
+    std::vector<std::unique_ptr<Component>> components; ///< Componentes anexados (posse exclusiva).
 
     // TODO: Remover uso de mesh e sprite diretamente
     std::shared_ptr<Mesh> mesh;
@@ -88,6 +88,26 @@ class WorldObject {
 
     /** @brief Indica se o objeto possui um componente do tipo @p T. */
     template <typename T> bool hasComponent() const { return getComponent<T>() != nullptr; }
+
+    /**
+     * @brief Chama Component::start() em todos os componentes do objeto.
+     *
+     * Executado uma vez pela Application depois que a cena termina de carregar,
+     * quando o objeto já está completo (todos os componentes anexados).
+     */
+    void startComponents() {
+        for (auto& comp : components)
+            comp->start();
+    }
+
+    /**
+     * @brief Chama Component::update() em todos os componentes do objeto.
+     * @param deltaTime Tempo do frame, em segundos, repassado a cada componente.
+     */
+    void updateComponents(float deltaTime) {
+        for (auto& comp : components)
+            comp->update(deltaTime);
+    }
 
     // TODO: remover suporte a legacy mesh/sprite
 

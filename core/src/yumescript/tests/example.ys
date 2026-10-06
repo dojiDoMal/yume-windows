@@ -1,0 +1,22 @@
+# Exemplo de YumeScript (.ys) — Fase 1.
+# Testa: null, guardar this.transform numa variável global no start() e
+# reusá-la no update() (persistência de objeto entre frames).
+
+let speed = 45
+let transform = null
+
+function start:
+    log("start chamado")
+    transform = this.transform
+
+function update dt:
+    transform.rotation.x += speed * dt
+    transform.rotation.y += speed * dt
+    if transform.rotation.x > 90:
+        log("passou de 90 graus em X")
+    else:
+        log("ainda abaixo de 90 em X")
+
+# Função com retorno, usada só para exercitar return/expressões.
+function dobro n:
+    return n * 2

@@ -1,15 +1,14 @@
 #ifndef VULKAN_RENDERER_BACKEND_HPP
 #define VULKAN_RENDERER_BACKEND_HPP
 
-#include "math/matrix4.hpp"
 #include "assets/mesh.hpp"
-#include "scene/world_object.hpp"
+#include "math/matrix4.hpp"
 #include "renderer/renderer_backend.hpp"
+#include "scene/world_object.hpp"
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
 
-struct SDL_Window;
 class VulkanRendererBackend : public RendererBackend {
   private:
     VkInstance instance = VK_NULL_HANDLE;
@@ -65,7 +64,7 @@ class VulkanRendererBackend : public RendererBackend {
     uint32_t currentImageIndex = 0;
     VkFormat swapchainFormat;
     VkExtent2D swapchainExtent;
-    SDL_Window* window;
+    void* window = nullptr; ///< Handle opaco da janela (ex.: SDL_Window*), via DisplayBackend.
 
     bool createInstance();
     bool pickPhysicalDevice();
@@ -186,7 +185,7 @@ class VulkanRendererBackend : public RendererBackend {
     std::unique_ptr<ShaderProgram> createShaderProgram() override;
     std::unique_ptr<ShaderCompiler> createShaderCompiler() override;
     std::unique_ptr<MeshBuffer> createMeshBuffer() override;
-    void present(SDL_Window* window) override;
+    void present(void* window) override;
 
     VkDevice getDevice() const { return device; }
     VkPhysicalDevice getPhysicalDevice() const { return physicalDevice; }
@@ -198,9 +197,8 @@ class VulkanRendererBackend : public RendererBackend {
     VkRenderPass getRenderPass() const { return renderPass; }
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
     void setSurface(VkSurfaceKHR surf) { surface = surf; }
-    void setWindow(SDL_Window* win) { window = win; }
-    unsigned int getRequiredWindowFlags() const override;
-    bool init(SDL_Window* window) override;
+    void setWindow(void* win) { window = win; }
+    bool init(void* window, DisplayBackend& display) override;
 
     bool initText(const FontAtlas& atlas, unsigned int textureID, const std::string& vertPath,
                   const std::string& fragPath) override;

@@ -1,10 +1,10 @@
 #ifndef D3D12_RENDERER_BACKEND_HPP
 #define D3D12_RENDERER_BACKEND_HPP
 
-#include "math/matrix4.hpp"
 #include "assets/mesh.hpp"
-#include "scene/world_object.hpp"
+#include "math/matrix4.hpp"
 #include "renderer/renderer_backend.hpp"
+#include "scene/world_object.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <unordered_map>
@@ -153,7 +153,7 @@ class D3D12RendererBackend : public RendererBackend {
     std::unique_ptr<ShaderProgram> createShaderProgram() override;
     std::unique_ptr<ShaderCompiler> createShaderCompiler() override;
     std::unique_ptr<MeshBuffer> createMeshBuffer() override;
-    void present(SDL_Window* window) override;
+    void present(void* window) override;
 
     ID3D12Device* getDevice() const { return device; }
     ID3D12GraphicsCommandList* getCommandList() const { return commandList; }
@@ -166,8 +166,7 @@ class D3D12RendererBackend : public RendererBackend {
     }
     void updateConstantBuffer(int binding, const void* data, size_t size);
     void setHwnd(void* hwnd) { this->hwnd = hwnd; }
-    unsigned int getRequiredWindowFlags() const override;
-    bool init(SDL_Window* window) override;
+    bool init(void* window, DisplayBackend& display) override;
 
     bool initText(const FontAtlas& atlas, unsigned int textureID, const std::string& vertPath,
                   const std::string& fragPath) override;

@@ -4,21 +4,28 @@
 #include "graphics_api.hpp"
 #include "renderer/renderer.hpp"
 #include "renderer_config.hpp"
-#include "window/mml/multimedia_layer.hpp"
+#include "window/mml/display_backend.hpp"
 #include "window/window_desc.hpp"
 
 class DisplayManager {
   private:
     GraphicsAPI graphicsApi;
     RendererConfig rendererConfig;
-    MultimediaLayer* multiMediaLayer = nullptr;
+    DisplayBackend* displayBackend =
+        nullptr; ///< Backend de janela; detido pela MultimediaLayer (não por aqui).
     void* window = nullptr;
     Renderer* renderer = nullptr;
 
   public:
     ~DisplayManager();
 
-    bool init(const WindowDesc& desc);
+    /**
+     * @brief Cria o renderer e a janela principal.
+     * @param displayBackend Backend de janela da plataforma (detido pela
+     *        MultimediaLayer; o DisplayManager apenas o usa, não o destrói).
+     * @param desc Título/dimensões da janela.
+     */
+    bool init(DisplayBackend& displayBackend, const WindowDesc& desc);
     void render(Scene& scene);
     void* getWindow() { return window; };
     Renderer* getRenderer() { return renderer; }

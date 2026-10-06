@@ -3,10 +3,10 @@
 
 #include "components/lod_group.hpp"
 #include "math/math.hpp"
-#include "scene/world_object.hpp"
 #include "renderer/frustum.hpp"
 #include "renderer/renderer.hpp"
 #include "renderer/renderer_factory.hpp"
+#include "scene/world_object.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -29,9 +29,9 @@ bool Renderer::initBackend(const GraphicsAPI& graphicsApi) {
     return true;
 }
 
-bool Renderer::initWindow(SDL_Window* win) {
+bool Renderer::initWindow(void* window, DisplayBackend& display) {
     if (backend) {
-        return backend->init(win);
+        return backend->init(window, display);
     }
     return false;
 }
@@ -162,7 +162,7 @@ void Renderer::render(const Scene& scene) {
     backend->renderWorldObjects(renderableObjects, lights);
 }
 
-void Renderer::present(SDL_Window* window) {
+void Renderer::present(void* window) {
     if (backend) {
         backend->present(window);
     }

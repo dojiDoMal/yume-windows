@@ -1,11 +1,11 @@
 #ifndef OPEN_GL_RENDERER_BACKEND_HPP
 #define OPEN_GL_RENDERER_BACKEND_HPP
 
+#include "assets/mesh.hpp"
 #include "graphics_api.hpp"
 #include "math/matrix4.hpp"
-#include "assets/mesh.hpp"
-#include "scene/world_object.hpp"
 #include "renderer/renderer_backend.hpp"
+#include "scene/world_object.hpp"
 #ifdef __SWITCH__
 #include <glad/glad.h>
 #else
@@ -17,6 +17,7 @@
 
 class OpenGLRendererBackend : public RendererBackend {
   private:
+    void* glContext = nullptr; ///< Contexto GL opaco, criado pelo DisplayBackend.
     GLuint instanceSSBO = 0;
     GLuint spriteVAO = 0;
     GLuint spriteVBO = 0;
@@ -62,7 +63,7 @@ class OpenGLRendererBackend : public RendererBackend {
     unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
-    void present(SDL_Window* window) override;
+    void present(void* window) override;
     void bindCamera(Camera* camera) override;
     void applyMaterial(Material* material) override;
     void setBufferDataImpl(const std::string& name, const void* data, size_t size) override;
@@ -84,8 +85,7 @@ class OpenGLRendererBackend : public RendererBackend {
     void renderSkybox(const Mesh& mesh, unsigned int shaderProgram,
                       unsigned int textureID) override;
 
-    unsigned int getRequiredWindowFlags() const override;
-    bool init(SDL_Window* window) override;
+    bool init(void* window, DisplayBackend& display) override;
 
     bool initText(const FontAtlas& atlas, unsigned int textureID, const std::string& vertPath,
                   const std::string& fragPath) override;

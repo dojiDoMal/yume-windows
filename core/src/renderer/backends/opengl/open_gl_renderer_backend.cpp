@@ -1,22 +1,21 @@
 #define CLASS_NAME "OpenGLRendererBackend"
 #include "log_macros.hpp"
 
+#include "assets/material.hpp"
+#include "assets/mesh_buffer_factory.hpp"
+#include "assets/shader_compiler_factory.hpp"
+#include "assets/shader_program_factory.hpp"
+#include "assets/stb_image.h"
 #include "color.hpp"
 #include "components/mesh_renderer.hpp"
 #include "components/sprite_renderer.hpp"
-#include "assets/material.hpp"
 #include "math/math.hpp"
-#include "assets/stb_image.h"
-#include "assets/mesh_buffer_factory.hpp"
 #include "open_gl_renderer_backend.hpp"
-#include "assets/shader_compiler_factory.hpp"
-#include "assets/shader_program_factory.hpp"
+#include "window/mml/display_backend.hpp"
 #ifdef __SWITCH__
 #include <glad/glad.h>
-#include <SDL.h>
 #else
 #include <GL/glew.h>
-#include <SDL2/SDL.h>
 #endif
 #include <fstream>
 #include <sstream>
@@ -50,9 +49,14 @@ OpenGLRendererBackend::~OpenGLRendererBackend() {
         glDeleteBuffers(1, &textUBOProjection);
     if (textUBOColor)
         glDeleteBuffers(1, &textUBOColor);
-}
 
-unsigned int OpenGLRendererBackend::getRequiredWindowFlags() const { return SDL_WINDOW_OPENGL; };
+    // The context was created by the display backend, so hand it back for
+    // destruction there (keeps all SDL_GL_* calls on one side of the boundary).
+    if (glContext && displayBackend) {
+        displayBackend->destroyGLContext(glContext);
+        glContext = nullptr;
+    }
+}
 
 std::unique_ptr<ShaderProgram> OpenGLRendererBackend::createShaderProgram() {
     return ShaderProgramFactory::create(getGraphicsAPI());
@@ -66,32 +70,36 @@ std::unique_ptr<ShaderCompiler> OpenGLRendererBackend::createShaderCompiler() {
     return ShaderCompilerFactory::create(getGraphicsAPI());
 }
 
-bool OpenGLRendererBackend::init(SDL_Window* window) {
+bool OpenGLRendererBackend::init(void* window, DisplayBackend& display) {
     if (!window) {
         LOG_ERROR("Window is null!");
         return false;
     }
+    displayBackend = &display;
 
-    // By default, SDL enables VSync (swap interval = 1),
-    // which caps the FPS to the monitor's refresh rate (60Hz).
-    SDL_GLContext glContext = SDL_GL_CreateContext(window);
+    // The GL context creation/ownership now lives in the display backend, which
+    // is the only place that talks to SDL. It also makes the context current.
+    glContext = displayBackend->createGLContext(window);
     if (!glContext) {
-        LOG_ERROR(std::string("Failed to create OpenGL context: ") + SDL_GetError());
+        LOG_ERROR("Failed to create OpenGL context");
         return false;
     }
 
 #ifdef __SWITCH__
     // On the Switch the GL entry points are resolved at runtime through glad,
-    // using SDL's EGL loader. Desktop uses GLEW instead (see init()).
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
-        LOG_ERROR(std::string("Failed to load OpenGL routines using glad: ") + SDL_GetError());
-        SDL_GL_DeleteContext(glContext);
+    // using the platform's GL proc loader (SDL's EGL loader under the hood).
+    // Desktop uses GLEW instead (see init()).
+    auto loader = reinterpret_cast<GLADloadproc>(displayBackend->getGLProcAddressLoader());
+    if (!loader || !gladLoadGLLoader(loader)) {
+        LOG_ERROR("Failed to load OpenGL routines using glad");
+        displayBackend->destroyGLContext(glContext);
+        glContext = nullptr;
         return false;
     }
 #endif
 
     // Vsync from project.conf: 1 = cap to refresh rate, 0 = uncapped.
-    SDL_GL_SetSwapInterval(vsyncEnabled ? 1 : 0);
+    displayBackend->setSwapInterval(vsyncEnabled);
 
     return init();
 };
@@ -445,7 +453,11 @@ void OpenGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
     glDepthFunc(GL_LESS);
 }
 
-void OpenGLRendererBackend::present(SDL_Window* window) { SDL_GL_SwapWindow(window); }
+void OpenGLRendererBackend::present(void* window) {
+    if (displayBackend) {
+        displayBackend->swapBuffers(window);
+    }
+}
 
 void OpenGLRendererBackend::initSpriteQuad() {
     float vertices[] = {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.5f,  -0.5f, 0.0f, 1.0f, 0.0f,

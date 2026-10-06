@@ -3,19 +3,17 @@
 #define CLASS_NAME "VulkanRendererBackend"
 #include "log_macros.hpp"
 
-#include "color.hpp"
-#include "components/mesh_renderer.hpp"
 #include "assets/font_atlas.hpp"
 #include "assets/material.hpp"
-#include "math/math.hpp"
-#include "assets/stb_image.h"
 #include "assets/shader_program_factory.hpp"
+#include "assets/stb_image.h"
+#include "color.hpp"
+#include "components/mesh_renderer.hpp"
+#include "math/math.hpp"
 #include "vulkan_mesh_buffer.hpp"
 #include "vulkan_renderer_backend.hpp"
 #include "vulkan_shader_program.hpp"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
-#include <SDL_video.h>
+#include "window/mml/display_backend.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -144,9 +142,7 @@ VulkanRendererBackend::~VulkanRendererBackend() {
         vkDestroyInstance(instance, nullptr);
 }
 
-unsigned int VulkanRendererBackend::getRequiredWindowFlags() const { return SDL_WINDOW_VULKAN; };
-
-bool VulkanRendererBackend::init(SDL_Window* win) {
+bool VulkanRendererBackend::init(void* win, DisplayBackend& display) {
     // Full Vulkan bring-up, driven from the window init (mirrors how the OpenGL
     // backend creates its context inside init(window)). Order matters:
     // instance -> surface -> device/swapchain/... (the rest lives in init()).
@@ -154,6 +150,7 @@ bool VulkanRendererBackend::init(SDL_Window* win) {
         LOG_ERROR("Window is null!");
         return false;
     }
+    displayBackend = &display;
     setWindow(win);
 
     if (!createInstance()) {
@@ -161,9 +158,11 @@ bool VulkanRendererBackend::init(SDL_Window* win) {
         return false;
     }
 
+    // Surface creation is window/platform work, so it goes through the display
+    // backend (the only side that talks to SDL_Vulkan_*).
     VkSurfaceKHR surf = VK_NULL_HANDLE;
-    if (!SDL_Vulkan_CreateSurface(win, instance, &surf)) {
-        LOG_ERROR(std::string("SDL_Vulkan_CreateSurface failed: ") + SDL_GetError());
+    if (!displayBackend->createVulkanSurface(win, instance, &surf)) {
+        LOG_ERROR("Failed to create Vulkan surface");
         return false;
     }
     setSurface(surf);
@@ -256,15 +255,13 @@ bool VulkanRendererBackend::createInstance() {
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    // SDL extensions
-    unsigned int extensionCount = 0;
-    SDL_Vulkan_GetInstanceExtensions(nullptr, &extensionCount, nullptr);
-    std::vector<const char*> extensions(extensionCount);
-    SDL_Vulkan_GetInstanceExtensions(nullptr, &extensionCount, extensions.data());
+    // Platform-required instance extensions come from the display backend
+    // (which asks SDL), so this file never includes SDL_vulkan directly.
+    std::vector<const char*> extensions = displayBackend->getVulkanInstanceExtensions();
 
-    printf("[Vulkan] Required extensions: %u\n", extensionCount);
+    printf("[Vulkan] Required extensions: %zu\n", extensions.size());
 
-    createInfo.enabledExtensionCount = extensionCount;
+    createInfo.enabledExtensionCount = static_cast<unsigned int>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
     createInfo.enabledLayerCount = 0;
 
@@ -1181,7 +1178,8 @@ void VulkanRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
     // Implementar skybox Vulkan
 }
 
-void VulkanRendererBackend::present(SDL_Window* window) {
+void VulkanRendererBackend::present(void* window) {
+    (void)window; // Vulkan presents through its own swapchain, not the window.
     vkCmdEndRenderPass(commandBuffers[currentImageIndex]);
 
     if (vkEndCommandBuffer(commandBuffers[currentImageIndex]) != VK_SUCCESS) {
