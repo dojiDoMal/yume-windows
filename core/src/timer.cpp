@@ -4,6 +4,8 @@
 #include <windows.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#elif defined(__3DS__)
+#include <3ds.h>
 #elif defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #elif defined(__APPLE__)
@@ -23,6 +25,9 @@ Timer::Timer() : deltaTime(0.0f) {
     startTime = lastTime;
 #elif defined(__SWITCH__)
     lastTime = armGetSystemTick();
+    startTime = lastTime;
+#elif defined(__3DS__)
+    lastTime = svcGetSystemTick();
     startTime = lastTime;
 #elif defined(__EMSCRIPTEN__)
     lastTime = emscripten_get_now();
@@ -46,6 +51,13 @@ void Timer::tick() {
     u64 currentTime = armGetSystemTick();
     u64 elapsed = currentTime - lastTime;
     deltaTime = (float)(armTicksToNs(elapsed) / 1000000000.0);
+    lastTime = currentTime;
+#elif defined(__3DS__)
+    // svcGetSystemTick() devolve ticks do ARM11; CPU_TICKS_PER_MSEC (os.h)
+    // converte ticks -> milissegundos. Dividir por 1000 leva a segundos.
+    u64 currentTime = svcGetSystemTick();
+    u64 elapsed = currentTime - lastTime;
+    deltaTime = (float)((double)elapsed / (CPU_TICKS_PER_MSEC * 1000.0));
     lastTime = currentTime;
 #elif defined(__EMSCRIPTEN__)
     double currentTime = emscripten_get_now();
@@ -72,6 +84,9 @@ float Timer::getTime() const {
 #elif defined(__SWITCH__)
     u64 elapsed = armGetSystemTick() - startTime;
     return (float)(armTicksToNs(elapsed) / 1000000000.0);
+#elif defined(__3DS__)
+    u64 elapsed = svcGetSystemTick() - startTime;
+    return (float)((double)elapsed / (CPU_TICKS_PER_MSEC * 1000.0));
 #elif defined(__EMSCRIPTEN__)
     return (float)(emscripten_get_now() - startTime) / 1000.0f;
 #else

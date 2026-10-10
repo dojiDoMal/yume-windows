@@ -15,6 +15,16 @@
  */
 class N3DSMultimediaLayer : public MultimediaLayer {
   public:
+    // Construtor e destrutor declarados aqui mas DEFINIDOS no .cpp (onde os
+    // tipos completos de IInput/DisplayBackend/AudioBackend estão incluídos).
+    // Sem isso, qualquer TU que apenas inclua este header e instancie/destrua a
+    // classe (ex.: multimedia_layer_factory.cpp) tentaria gerar o ctor/dtor dos
+    // membros unique_ptr<IInput> inline, exigindo o tipo completo de IInput ali
+    // -- que é só forward-declared em multimedia_layer.hpp. Mantê-los no .cpp
+    // é o idiom "pimpl/incomplete-type unique_ptr".
+    N3DSMultimediaLayer();
+    ~N3DSMultimediaLayer() override;
+
     bool init() override;
     void end() override;
 
@@ -23,6 +33,7 @@ class N3DSMultimediaLayer : public MultimediaLayer {
     AudioBackend& audio() override;
 
   private:
+    bool initialized = false;
     std::unique_ptr<DisplayBackend> displayBackend;
     std::unique_ptr<Yume::IInput> inputBackend;
     std::unique_ptr<AudioBackend> audioBackend;

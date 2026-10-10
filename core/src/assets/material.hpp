@@ -1,10 +1,10 @@
 #ifndef MATERIAL_HPP
 #define MATERIAL_HPP
 
-#include "color.hpp"
-#include "components/light.hpp"
 #include "assets/shader_asset.hpp"
 #include "assets/shader_program.hpp"
+#include "color.hpp"
+#include "components/light.hpp"
 #include <memory>
 
 /**
@@ -39,6 +39,8 @@ class Material {
     void use();
     /** @brief Define a cor base da superfície. */
     void setBaseColor(const ColorRGBA color);
+    /** @brief Retorna a cor base da superfície (RGBA, componentes 0..1). */
+    ColorRGBA getBaseColor() const { return baseColor; }
     /** @brief Envia os parâmetros de uma luz para o shader. */
     void applyLight(const Light& light);
 

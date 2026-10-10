@@ -1,23 +1,31 @@
 #define CLASS_NAME "Material"
 #include "log_macros.hpp"
 
+#include "assets/material.hpp"
 #include "color.hpp"
 #include "components/light.hpp"
-#include "assets/material.hpp"
 
 Material::Material() {}
 
 bool Material::init() {
-    if (!vertexShader || !fragmentShader || !shaderProgram) {
+    // O fragment shader é opcional: no PICA200 (3DS) ele não existe (a etapa de
+    // fragmento é feita por TexEnv no backend), então o scene_loader não cria um
+    // fragmentShader nessa plataforma. As demais plataformas sempre o fornecem.
+    if (!vertexShader || !shaderProgram) {
         return false;
     }
 
-    if (!vertexShader->load() || !fragmentShader->load()) {
+    if (!vertexShader->load()) {
+        return false;
+    }
+    if (fragmentShader && !fragmentShader->load()) {
         return false;
     }
 
-    if (!shaderProgram->attachShader(*vertexShader) ||
-        !shaderProgram->attachShader(*fragmentShader)) {
+    if (!shaderProgram->attachShader(*vertexShader)) {
+        return false;
+    }
+    if (fragmentShader && !shaderProgram->attachShader(*fragmentShader)) {
         return false;
     }
 

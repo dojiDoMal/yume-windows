@@ -63,6 +63,11 @@ extern "C" void userAppExit() { deinitNxLink(); }
 #define LOG_ERROR(msg) TRACE("[ERROR] %s", (std::string(msg)).c_str())
 
 #else
+// No 3DS usamos o mesmo ponto único (Logger::log) do desktop: lá a saída vai
+// para svcOutputDebugString (log do emulador), sem desenhar na tela — por isso
+// não há consoleInit em lugar nenhum e as duas telas ficam livres para o
+// citro3d. As macros são idênticas às do desktop; a diferença de destino mora
+// dentro de Logger::log (ver logger.cpp, ramo __3DS__).
 
 #define LOG_INFO(msg) Logger::log(CLASS_NAME, __func__, (std::string("[INFO] ") + msg).c_str())
 

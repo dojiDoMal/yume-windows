@@ -13,6 +13,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
     set(IS_SWITCH TRUE)
 endif()
 
+# The devkitARM 3DS toolchain (3DS.cmake) sets CMAKE_SYSTEM_NAME to "Nintendo3DS"
+# and defines __3DS__. Use it as the single source of truth for the 3DS build
+# path (Citro3D backend + libctru). The toolchain already defines __3DS__ in its
+# CFLAGS, so engine code gates on #ifdef __3DS__ without us re-adding it.
+if(CMAKE_SYSTEM_NAME STREQUAL "Nintendo3DS")
+    set(IS_3DS TRUE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -53,7 +61,7 @@ include(${YUME_ENGINE_ROOT}/cmake/YumeProject.cmake)
 # ${YUME_ENGINE_ROOT}/tools; for native builds compile it here. The resulting
 # command/deps are published for yume_compile_scenes() via YUME_SCENE_COMPILER_*.
 # -----------------------------------------------------------------------------
-if(EMSCRIPTEN OR IS_SWITCH)
+if(EMSCRIPTEN OR IS_SWITCH OR IS_3DS)
     find_program(SCENE_COMPILER_EXE scene_compiler PATHS ${YUME_ENGINE_ROOT}/tools REQUIRED)
     set(YUME_SCENE_COMPILER_CMD ${SCENE_COMPILER_EXE} CACHE STRING "scene_compiler command" FORCE)
     set(YUME_SCENE_COMPILER_DEPS "" CACHE STRING "scene_compiler deps" FORCE)
@@ -93,6 +101,17 @@ endif()
 
 set(BACKENDS_DIR "${YUME_ENGINE_ROOT}/core/src/renderer/backends")
 
+# 3DS-only sources that must NOT be compiled on any other platform: they include
+# <citro3d.h>/<3ds.h> (libctru), which only exist in the devkitARM 3DS toolchain.
+# Collected here so each non-3DS branch below can drop them in one shot, and so
+# the 3DS branch can drop everything else and keep only these.
+file(GLOB_RECURSE _citro3d_sources "${BACKENDS_DIR}/citro3d/*.cpp")
+file(GLOB_RECURSE _n3ds_window_sources
+    "${YUME_ENGINE_ROOT}/core/src/window/mml/3ds/*.cpp"
+    "${YUME_ENGINE_ROOT}/core/src/window/mml/audio/3ds/*.cpp")
+file(GLOB _n3ds_input_sources "${YUME_ENGINE_ROOT}/core/src/input/n3ds_input.cpp")
+set(_3DS_ONLY_SOURCES ${_citro3d_sources} ${_n3ds_window_sources} ${_n3ds_input_sources})
+
 # Per-API SDL2 display backends. Each mirrors a renderer backend: it is the only
 # place that touches the SDL calls specific to one API (SDL_GL_* / SDL_Vulkan_*
 # / SDL_syswm). Drop them on platforms that lack the API so, e.g., no Vulkan or
@@ -100,7 +119,24 @@ set(BACKENDS_DIR "${YUME_ENGINE_ROOT}/core/src/renderer/backends")
 # is kept wherever SDL is used.
 set(MML_SDL2_DIR "${YUME_ENGINE_ROOT}/core/src/window/mml/sdl2")
 
-if(EMSCRIPTEN)
+if(IS_3DS)
+    # The 3DS build keeps ONLY the Citro3D backend and the libctru-based window/
+    # input/audio sources; every SDL2/GL/Vulkan/D3D12/WebGL source is dropped
+    # since none of those APIs exist on the console.
+    foreach(BACKEND opengl vulkan directx12 webgl)
+        file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
+        list(REMOVE_ITEM SOURCES ${_files})
+    endforeach()
+    # Drop the whole SDL2 display-backend dir and the desktop (SDL) input impl;
+    # the 3DS uses N3DSDisplayBackend / N3DSInput instead.
+    file(GLOB _sdl2_sources "${MML_SDL2_DIR}/*")
+    file(GLOB _sdl2_audio_sources "${YUME_ENGINE_ROOT}/core/src/window/mml/audio/sdl2/*")
+    list(REMOVE_ITEM SOURCES
+        ${_sdl2_sources}
+        ${_sdl2_audio_sources}
+        "${YUME_ENGINE_ROOT}/core/src/window/mml/sdl2/sdl2_multimedia_layer.cpp"
+        "${YUME_ENGINE_ROOT}/core/src/input/desktop_input.cpp")
+elseif(EMSCRIPTEN)
     foreach(BACKEND opengl vulkan directx12)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
         list(REMOVE_ITEM SOURCES ${_files})
@@ -109,6 +145,8 @@ if(EMSCRIPTEN)
     list(REMOVE_ITEM SOURCES
         "${MML_SDL2_DIR}/sdl2_vulkan_display_backend.cpp"
         "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
+    # 3DS-only sources never belong to a Web build.
+    list(REMOVE_ITEM SOURCES ${_3DS_ONLY_SOURCES})
 elseif(IS_SWITCH)
     # Switch uses the unified opengl backend, which selects the glad loader and
     # OpenGL ES bits via `#ifdef __SWITCH__`. Only webgl/vulkan/directx12 are
@@ -121,6 +159,8 @@ elseif(IS_SWITCH)
     list(REMOVE_ITEM SOURCES
         "${MML_SDL2_DIR}/sdl2_vulkan_display_backend.cpp"
         "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
+    # 3DS-only sources never belong to a Switch build.
+    list(REMOVE_ITEM SOURCES ${_3DS_ONLY_SOURCES})
 else()
     foreach(BACKEND webgl)
         file(GLOB _files "${BACKENDS_DIR}/${BACKEND}/*")
@@ -131,6 +171,8 @@ else()
     if(NOT WIN32)
         list(REMOVE_ITEM SOURCES "${MML_SDL2_DIR}/sdl2_d3d12_display_backend.cpp")
     endif()
+    # 3DS-only sources never belong to a native desktop build.
+    list(REMOVE_ITEM SOURCES ${_3DS_ONLY_SOURCES})
 endif()
 
 add_library(yume_core STATIC ${SOURCES})
@@ -147,7 +189,7 @@ target_compile_definitions(yume_core PUBLIC $<$<CONFIG:Debug>:YUME_DEBUG>)
 # It links yume_core only for the yumescript sources it already contains; it has
 # no graphics dependencies of its own. Build with: --target yumescript_test.
 # -----------------------------------------------------------------------------
-if(NOT EMSCRIPTEN AND NOT IS_SWITCH)
+if(NOT EMSCRIPTEN AND NOT IS_SWITCH AND NOT IS_3DS)
     # Compile the yumescript sources directly into the harness so it stays truly
     # standalone -- no yume_core link, no SDL2/GLEW/Vulkan pulled in. The
     # language core has no engine dependencies, which is exactly what Phase 1
@@ -168,6 +210,8 @@ endif()
 # -----------------------------------------------------------------------------
 if(EMSCRIPTEN)
     include(${YUME_ENGINE_ROOT}/cmake/Web.cmake)
+elseif(IS_3DS)
+    include(${YUME_ENGINE_ROOT}/cmake/N3DS.cmake)
 elseif(IS_SWITCH)
     include(${YUME_ENGINE_ROOT}/cmake/Switch.cmake)
 else()

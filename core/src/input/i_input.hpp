@@ -2,7 +2,12 @@
 #define I_INPUT_HPP
 
 #include "input/input_key.hpp"
+// A interface em si não usa tipos SDL (só std::function/KeyCode); o include do
+// SDL serve às implementações desktop/Switch. O 3DS não tem SDL, então o
+// pulamos lá — a implementação N3DSInput usa a libctru (hid), não SDL.
+#ifndef __3DS__
 #include <SDL2/SDL.h>
+#endif
 #include <functional>
 
 namespace Yume {
@@ -24,7 +29,8 @@ class IInput {
   public:
     virtual ~IInput() = default;
 
-    /** @brief Processa a fila de eventos e dispara os callbacks de teclas; chame uma vez por frame. */
+    /** @brief Processa a fila de eventos e dispara os callbacks de teclas; chame uma vez por frame.
+     */
     virtual void processEvents() = 0;
     /**
      * @brief Associa um callback a uma tecla.

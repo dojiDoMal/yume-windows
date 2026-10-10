@@ -1,5 +1,6 @@
 #define CLASS_NAME "SceneLoader"
 #include "log_macros.hpp"
+#include "platform_paths.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "assets/tinyobjloader/tiny_obj_loader.h"
@@ -27,18 +28,27 @@ void SceneLoader::setRendererBackend(RendererBackend& backend) { rendererBackend
 std::unique_ptr<Material> SceneLoader::createMaterial(const MaterialData& matData) {
     auto shaderExt = rendererBackend->getShaderExtension();
 
-    auto vertexShader =
-        std::make_unique<ShaderAsset>(matData.vertexShaderPath + shaderExt, ShaderType::VERTEX);
+    // Resolve against the platform asset root (romfs:/ on consoles, no-op
+    // elsewhere) before appending the backend's shader extension.
+    auto vertexShader = std::make_unique<ShaderAsset>(
+        Yume::resolveAssetPath(matData.vertexShaderPath + shaderExt), ShaderType::VERTEX);
     vertexShader->setShaderCompiler(rendererBackend->createShaderCompiler());
-
-    auto fragmentShader =
-        std::make_unique<ShaderAsset>(matData.fragmentShaderPath + shaderExt, ShaderType::FRAGMENT);
-    fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
 
     auto material = std::make_unique<Material>();
     material->setShaderProgram(rendererBackend->createShaderProgram());
     material->setVertexShader(std::move(vertexShader));
+
+#ifndef __3DS__
+    // O PICA200 (3DS) não tem fragment shader programável: a etapa de fragmento
+    // é configurada por TexEnv no backend, não por um shader. Então só criamos/
+    // anexamos o fragment nas plataformas que de fato o usam — no 3DS não há
+    // ".shbin" de fragment para carregar.
+    auto fragmentShader = std::make_unique<ShaderAsset>(
+        Yume::resolveAssetPath(matData.fragmentShaderPath + shaderExt), ShaderType::FRAGMENT);
+    fragmentShader->setShaderCompiler(rendererBackend->createShaderCompiler());
     material->setFragmentShader(std::move(fragmentShader));
+#endif
+
     material->setBaseColor(matData.color);
 
     if (!material->init())
@@ -174,7 +184,8 @@ void SceneLoader::loadSpriteRendererComponent(WorldObject* obj, const ComponentD
     float height = textureData.height * textureData.scaleFactor;
     auto sprite = std::make_unique<Sprite>(width, height);
 
-    unsigned int texID = rendererBackend->loadTexture(textureData.path, textureData.filterType);
+    unsigned int texID = rendererBackend->loadTexture(Yume::resolveAssetPath(textureData.path),
+                                                      textureData.filterType);
     sprite->setTexture(texID);
 
     auto material = createMaterial(materialData);
@@ -212,7 +223,7 @@ void SceneLoader::loadCameraComponent(WorldObject* obj, const ComponentData& com
 
         std::vector<std::string> faces;
         for (const auto& row : camData.skybox.cubeMapTextures) {
-            faces.push_back(row);
+            faces.push_back(Yume::resolveAssetPath(row));
         }
 
         unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
@@ -231,7 +242,7 @@ void SceneLoader::loadTextRendererComponent(WorldObject* obj, const ComponentDat
     auto it = fontAtlasCache.find(data.font.atlasJsonPath);
     if (it == fontAtlasCache.end()) {
         auto atlas = std::make_shared<FontAtlas>();
-        if (!atlas->load(data.font.atlasJsonPath)) {
+        if (!atlas->load(Yume::resolveAssetPath(data.font.atlasJsonPath))) {
             LOG_ERROR("Failed to load font atlas: " + std::string(data.font.atlasJsonPath));
             return;
         }
@@ -239,13 +250,15 @@ void SceneLoader::loadTextRendererComponent(WorldObject* obj, const ComponentDat
         it = fontAtlasCache.find(data.font.atlasJsonPath);
     }
 
-    unsigned int texID = rendererBackend->loadTexture(data.font.texturePath, 1);
+    unsigned int texID =
+        rendererBackend->loadTexture(Yume::resolveAssetPath(data.font.texturePath), 1);
 
     auto shaderExt = rendererBackend->getShaderExtension();
     auto textRenderer = std::make_unique<TextRenderer>();
-    textRenderer->init(*rendererBackend, *it->second, texID,
-                       std::string(data.material.vertexShaderPath) + shaderExt,
-                       std::string(data.material.fragmentShaderPath) + shaderExt);
+    textRenderer->init(
+        *rendererBackend, *it->second, texID,
+        Yume::resolveAssetPath(std::string(data.material.vertexShaderPath) + shaderExt),
+        Yume::resolveAssetPath(std::string(data.material.fragmentShaderPath) + shaderExt));
 
     auto component = std::make_unique<TextRendererComponent>();
     component->setFontAtlas(std::make_unique<FontAtlas>(*it->second));
@@ -266,7 +279,11 @@ void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp
     obj->addComponent(std::move(light));
 }
 
-std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& filepath, bool shadeSmooth) {
+std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& relativePath, bool shadeSmooth) {
+    // Resolve once at the entry point so the cache key and the path handed to
+    // tinyobj both carry the platform asset root (romfs:/ on consoles).
+    const std::string filepath = Yume::resolveAssetPath(relativePath);
+
     auto it = meshCache.find(filepath);
     if (it != meshCache.end())
         return it->second;
@@ -364,7 +381,7 @@ void SceneLoader::loadScriptComponent(WorldObject* obj, const ComponentData& com
         LOG_ERROR("SCRIPT component with empty path; skipping");
         return;
     }
-    obj->addComponent(std::make_unique<ScriptComponent>(path));
+    obj->addComponent(std::make_unique<ScriptComponent>(Yume::resolveAssetPath(path)));
 }
 
 void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene) {

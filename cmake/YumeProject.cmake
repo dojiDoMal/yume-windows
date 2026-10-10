@@ -50,7 +50,25 @@ else()
     set(YUME_IS_SWITCH FALSE CACHE BOOL "Building for Nintendo Switch" FORCE)
 endif()
 
-if(YUME_IS_SWITCH)
+# The devkitARM 3DS toolchain (3DS.cmake) sets CMAKE_SYSTEM_NAME to "Nintendo3DS".
+# Cached for the same include_guard(GLOBAL) reason as YUME_IS_SWITCH: it must
+# survive into the project scope where yume_add_project()/
+# yume_compile_pica_shaders() run.
+if(CMAKE_SYSTEM_NAME STREQUAL "Nintendo3DS")
+    set(YUME_IS_3DS TRUE CACHE BOOL "Building for Nintendo 3DS" FORCE)
+else()
+    set(YUME_IS_3DS FALSE CACHE BOOL "Building for Nintendo 3DS" FORCE)
+endif()
+
+if(YUME_IS_3DS)
+    # The 3DS does NOT use the HLSL->SPIR-V->GLSL pipeline: PICA200 shaders are
+    # PICA assembly (*.v.pica) assembled by `picasso` into .shbin. So we skip
+    # dxc/spirv-cross entirely and locate picasso instead. It ships with the
+    # devkitPro toolchain under $DEVKITPRO/tools/bin.
+    find_program(PICASSO_EXECUTABLE picasso
+        PATHS "$ENV{DEVKITPRO}/tools/bin"
+        REQUIRED)
+elseif(YUME_IS_SWITCH)
     if(NOT HOST_DXC AND DEFINED ENV{HOST_DXC})
         set(HOST_DXC "$ENV{HOST_DXC}")
     endif()
@@ -192,6 +210,47 @@ function(yume_compile_shaders OUT_VAR)
 endfunction()
 
 # -----------------------------------------------------------------------------
+# yume_compile_pica_shaders(<out_var> PROJECT_DIR <dir> OUT_DIR <dir>)
+#
+# 3DS-only. Assembles every <dir>/*.vxs.pica (PICA200 vertex shader assembly)
+# into <OUT_DIR>/<name>.vxs.shbin using `picasso`, and returns the output list
+# so the caller can hang a target off them. This is the 3DS counterpart of
+# yume_compile_shaders (which targets GLSL/DXIL via dxc + spirv-cross and does
+# NOT apply here: the PICA200 has no HLSL/GLSL path).
+#
+# Naming must match the runtime. A material's vertexShaderPath keeps the ".vxs"
+# in it (e.g. "flat.vxs"), and the engine appends getShaderExtension() -> on the
+# 3DS ".shbin". So the file the engine opens is "flat.vxs.shbin". We therefore
+# source "flat.vxs.pica" and strip only the ".pica", exactly like the other
+# platforms turn "flat.vxs" into "flat.vxs.glsl"/".nxs". The PICA200 has no
+# fragment shader, so there is no ".pxs.pica" counterpart.
+# -----------------------------------------------------------------------------
+function(yume_compile_pica_shaders OUT_VAR)
+    cmake_parse_arguments(ARG "" "PROJECT_DIR;OUT_DIR" "" ${ARGN})
+
+    file(GLOB PICA_SHADERS "${ARG_PROJECT_DIR}/*.vxs.pica")
+
+    set(_outputs)
+    foreach(SHADER_FILE ${PICA_SHADERS})
+        # flat.vxs.pica -> flat.vxs.shbin (strip only the .pica suffix).
+        get_filename_component(_name ${SHADER_FILE} NAME)
+        string(REGEX REPLACE "\\.pica$" "" NAME_NO_PICA "${_name}")
+        set(SHBIN_FILE "${ARG_OUT_DIR}/${NAME_NO_PICA}.shbin")
+
+        add_custom_command(
+            OUTPUT ${SHBIN_FILE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${ARG_OUT_DIR}
+            COMMAND ${PICASSO_EXECUTABLE} -o ${SHBIN_FILE} ${SHADER_FILE}
+            DEPENDS ${SHADER_FILE}
+            COMMENT "Assembling ${_name} -> ${NAME_NO_PICA}.shbin (picasso)")
+
+        list(APPEND _outputs ${SHBIN_FILE})
+    endforeach()
+
+    set(${OUT_VAR} ${_outputs} PARENT_SCOPE)
+endfunction()
+
+# -----------------------------------------------------------------------------
 # yume_compile_scenes(<out_var> PROJECT_DIR <dir> OUT_DIR <dir>)
 #
 # Turns every <dir>/*.scn into <OUT_DIR>/*.scnb using the scene_compiler host
@@ -282,7 +341,11 @@ function(yume_add_project TARGET)
     #   - Switch: there is no "folder next to the exe" at runtime; assets must be
     #     packed into the .nro's RomFS. So we write them into a romfs/ staging
     #     dir and feed it to elf2nro below. The engine mounts it as romfs:/.
-    if(YUME_IS_SWITCH)
+    if(YUME_IS_SWITCH OR YUME_IS_3DS)
+        # Consoles have no "folder next to the exe" at runtime; assets must be
+        # packed into the app's RomFS, mounted as romfs:/ by the engine. Stage
+        # them in a romfs/ dir fed to the packer (elf2nro on Switch, 3dsxtool on
+        # 3DS).
         set(_out_dir "${CMAKE_CURRENT_BINARY_DIR}/romfs")
     elseif(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
         set(_out_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
@@ -291,7 +354,13 @@ function(yume_add_project TARGET)
         set_target_properties(${TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${_out_dir})
     endif()
 
-    yume_compile_shaders(_shader_outputs PROJECT_DIR ${ARG_PROJECT_DIR} OUT_DIR ${_out_dir})
+    # Shader step is per-platform: the 3DS assembles PICA200 *.v.pica via picasso;
+    # every other platform runs the HLSL->SPIR-V->GLSL/DXIL pipeline.
+    if(YUME_IS_3DS)
+        yume_compile_pica_shaders(_shader_outputs PROJECT_DIR ${ARG_PROJECT_DIR} OUT_DIR ${_out_dir})
+    else()
+        yume_compile_shaders(_shader_outputs PROJECT_DIR ${ARG_PROJECT_DIR} OUT_DIR ${_out_dir})
+    endif()
     yume_compile_scenes(_scene_outputs   PROJECT_DIR ${ARG_PROJECT_DIR} OUT_DIR ${_out_dir})
     yume_copy_assets(_asset_outputs      PROJECT_DIR ${ARG_PROJECT_DIR} OUT_DIR ${_out_dir})
 
@@ -395,5 +464,57 @@ function(yume_add_project TARGET)
             COMMENT "Packing ${TARGET}.nro (elf2nro + romfs)")
 
         add_custom_target(${TARGET}_nro ALL DEPENDS ${_nro})
+    endif()
+
+    # -------------------------------------------------------------------------
+    # 3DS: turn the linked ELF + the romfs staging dir into a runnable .3dsx.
+    #
+    # Mirrors the Switch path and the devkitPro 3ds_rules Makefile flow:
+    #   smdhtool  -> <TARGET>.smdh  (metadata: title/description/author + icon,
+    #                shown in the Homebrew Launcher)
+    #   3dsxtool  -> <TARGET>.3dsx  (ELF + RomFS + SMDH)
+    #
+    # The RomFS is mounted as romfs:/ at runtime, where the engine finds the
+    # .shbin shaders, scenes and assets. The .3dsx runs on Citra/Azahar and on
+    # homebrew-enabled hardware.
+    #
+    # NOTE: this is the homebrew/emulator flow. A .cia (eShop-style title) would
+    # additionally need a banner/makerom step, left out until needed.
+    # -------------------------------------------------------------------------
+    if(YUME_IS_3DS)
+        set(_dkp "$ENV{DEVKITPRO}")
+        set(_3dsxtool "${_dkp}/tools/bin/3dsxtool")
+        set(_smdhtool "${_dkp}/tools/bin/smdhtool")
+        set(_3dsx "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.3dsx")
+        set(_smdh "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.smdh")
+
+        # Metadata shown on the 3DS home menu / Homebrew Launcher. Overridable
+        # per project via -DYUME_APP_* (same knobs as the Switch path).
+        if(NOT YUME_APP_TITLE)
+            set(YUME_APP_TITLE "${TARGET}")
+        endif()
+        if(NOT YUME_APP_DESCRIPTION)
+            set(YUME_APP_DESCRIPTION "Built with the Yume engine")
+        endif()
+        if(NOT YUME_APP_AUTHOR)
+            set(YUME_APP_AUTHOR "Yume")
+        endif()
+        # Icon: honor -DYUME_APP_ICON, else fall back to libctru's default PNG.
+        if(NOT YUME_APP_ICON)
+            set(YUME_APP_ICON "${_dkp}/libctru/default_icon.png")
+        endif()
+
+        add_custom_command(
+            OUTPUT ${_3dsx}
+            # The assets target populated _out_dir (the romfs staging dir); depend
+            # on it so the romfs is complete before packing.
+            COMMAND ${_smdhtool} --create "${YUME_APP_TITLE}" "${YUME_APP_DESCRIPTION}"
+                    "${YUME_APP_AUTHOR}" "${YUME_APP_ICON}" ${_smdh}
+            COMMAND ${_3dsxtool} $<TARGET_FILE:${TARGET}> ${_3dsx}
+                    --romfs=${_out_dir} --smdh=${_smdh}
+            DEPENDS ${TARGET} ${TARGET}_assets
+            COMMENT "Packing ${TARGET}.3dsx (smdhtool + 3dsxtool + romfs)")
+
+        add_custom_target(${TARGET}_3dsx ALL DEPENDS ${_3dsx})
     endif()
 endfunction()

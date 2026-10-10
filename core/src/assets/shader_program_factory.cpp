@@ -9,7 +9,9 @@
  */
 #include "assets/shader_program_factory.hpp"
 
-#ifdef __SWITCH__
+#ifdef __3DS__
+#include "renderer/backends/citro3d/citro3d_shader_program.hpp"
+#elif defined(__SWITCH__)
 #include "renderer/backends/opengl/open_gl_shader_program.hpp"
 #elif PLATFORM_WEBGL
 #include "renderer/backends/webgl/web_gl_shader_program.hpp"
@@ -23,7 +25,10 @@
 
 std::unique_ptr<ShaderProgram> ShaderProgramFactory::create(GraphicsAPI api, void* context) {
     switch (api) {
-#ifdef __SWITCH__
+#ifdef __3DS__
+    case GraphicsAPI::CITRO3D:
+        return std::make_unique<Citro3DShaderProgram>();
+#elif defined(__SWITCH__)
     case GraphicsAPI::OPENGL:
         return std::make_unique<OpenGLShaderProgram>();
 #elif PLATFORM_WEBGL
@@ -38,7 +43,7 @@ std::unique_ptr<ShaderProgram> ShaderProgramFactory::create(GraphicsAPI api, voi
     case GraphicsAPI::DIRECTX12:
         return std::make_unique<D3D12ShaderProgram>(static_cast<D3D12RendererBackend*>(context));
 #endif // _WIN32
-#endif // __SWITCH__
+#endif // __3DS__
     default:
         return nullptr;
     }

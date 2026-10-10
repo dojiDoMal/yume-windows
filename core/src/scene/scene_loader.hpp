@@ -32,7 +32,8 @@ class SceneLoader {
     std::unordered_map<std::string, std::shared_ptr<FontAtlas>>
         fontAtlasCache; ///< Cache de atlas de fonte.
 
-    std::shared_ptr<Mesh> loadObjMesh(const std::string& filepath, bool shadeSmooth);
+    /// @param relativePath Caminho do .obj relativo à raiz de assets da plataforma.
+    std::shared_ptr<Mesh> loadObjMesh(const std::string& relativePath, bool shadeSmooth);
 
     /**
      * @brief Cria e inicializa um Material a partir dos dados de disco.

@@ -2,6 +2,8 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#elif defined(__3DS__)
+#include <3ds.h>
 #endif
 
 /**
@@ -26,6 +28,9 @@ class Timer {
     long long lastTime;
     long long startTime;
 #elif defined(__SWITCH__)
+    u64 lastTime;
+    u64 startTime;
+#elif defined(__3DS__)
     u64 lastTime;
     u64 startTime;
 #elif defined(__EMSCRIPTEN__)
