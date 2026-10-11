@@ -181,11 +181,19 @@ struct ComponentData {
     };
 };
 
-/// @brief Um objeto da cena: transformação inicial e seus componentes.
+/// @brief Um objeto da cena: transformação inicial, parentesco e componentes.
 struct WorldObjectData {
     Vector3 position;
     Vector3 rotation;
     Vector3 scale;
+    /**
+     * @brief Índice do objeto pai no array @c worldObjects, ou -1 se for raiz.
+     *
+     * Define a hierarquia: a transformação acima é LOCAL ao pai. O índice
+     * refere-se à posição no mesmo array de objetos da cena; o loader resolve
+     * o ponteiro numa segunda passada (o pai pode aparecer depois do filho).
+     */
+    int32_t parentIndex;
     uint8_t componentCount; ///< Quantos elementos de @c components estão em uso.
     ComponentData components[MAX_COMPONENTS_PER_OBJECT];
 };
@@ -204,7 +212,11 @@ struct WorldObjectData {
  * limite de sanidade ao validar o worldObjectCount lido de um arquivo
  * possivelmente corrompido ou incompatível.
  */
-static constexpr uint32_t SCENE_MAGIC = 0x53434E45; ///< Assinatura 'SCNE' no início do arquivo.
+// Assinatura no início do arquivo. O byte baixo funciona como versão do layout:
+// foi incrementado (0x45 'E' -> 0x46) ao adicionar WorldObjectData::parentIndex,
+// que mudou o sizeof e invalidou .scnb antigos. Arquivos com o magic velho são
+// rejeitados pelo loader (recompile a cena).
+static constexpr uint32_t SCENE_MAGIC = 0x53434E46; ///< 'SCN' + versão de layout (0x46).
 
 /// @brief Cabeçalho do arquivo de cena: assinatura e número de objetos.
 struct SceneHeader {

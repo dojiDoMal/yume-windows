@@ -4,6 +4,7 @@
 #include "application.hpp"
 
 #include "color.hpp"
+#include "components/script_services.hpp"
 #include "components/text_renderer_component.hpp"
 #include "logger.hpp"
 #include "platform_paths.hpp"
@@ -124,6 +125,10 @@ bool Application::boot() {
         sceneManager->loadScene("main");
     }
 
+    // Expose engine services to scripts before any component starts: a
+    // ScriptComponent's start() builds the Yume.InputSystem API from these.
+    ScriptServices::configure(&engine->getInputSystem(), rendererConfig.inputAliases);
+
     // Component start() hooks run once the scene is fully built, before any
     // per-frame work and before onInit, so a ScriptComponent can read its
     // owner's Transform and bind its script's start()/update().
@@ -167,7 +172,7 @@ void Application::mainLoop() {
         timer.tick();
         float deltaTime = timer.getDeltaTime();
 
-        engine->getInputSystem().processEvents();
+        engine->getInputSystem().processEvents(deltaTime);
         if (engine->getInputSystem().getQuitEvent()) {
 #if defined(__3DS__) || defined(__SWITCH__)
             break;

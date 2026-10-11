@@ -1014,8 +1014,8 @@ void VulkanRendererBackend::bindCamera(Camera* camera) {
 
     Matrix4 model = Matrix4(1.0f);
 
-    const auto camPos = cameraObj->getTransform().getPosition();
-    const auto camRot = cameraObj->getTransform().getRotation();
+    const auto camPos = cameraObj->getWorldPosition();
+    const auto camRot = cameraObj->getWorldRotation();
 
     float yawRad = Yume::Math::radians(camRot.y);
     float pitchRad = Yume::Math::radians(camRot.x);
@@ -1119,7 +1119,7 @@ void VulkanRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
             group.mesh = mesh;
             group.material = mat;
         }
-        group.models.push_back(obj->getTransform().getModelMatrix());
+        group.models.push_back(obj->getWorldMatrix());
     }
 
     VkCommandBuffer cmd = commandBuffers[currentImageIndex];
@@ -1164,7 +1164,7 @@ void VulkanRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
     for (auto* obj : nonInstancedObjects) {
         auto* meshRenderer = obj->getComponent<MeshRenderer>();
         auto* mat = meshRenderer->getMaterial();
-        Matrix4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getWorldMatrix();
         drawGroup(obj->getMesh(), mat, &model, 1);
     }
 }

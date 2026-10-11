@@ -2,7 +2,9 @@
 #define RENDERER_CONFIG_HPP
 
 #include "graphics_api.hpp"
+#include "input/input_key.hpp"
 #include <string>
+#include <unordered_map>
 
 /**
  * @brief Configuração do renderer no nível do projeto, lida uma vez no boot.
@@ -23,8 +25,8 @@
  */
 struct RendererConfig {
     GraphicsAPI api = GraphicsAPI::OPENGL; ///< Backend gráfico a ser criado.
-    bool srgb = false;                     ///< Espaço de cor de saída (ver descrição da struct).
-    bool vsync = true;                     ///< @c true limita à taxa de atualização do monitor.
+    bool srgb = false; ///< Espaço de cor de saída (ver descrição da struct).
+    bool vsync = true; ///< @c true limita à taxa de atualização do monitor.
 
     /**
      * Cena inicial carregada no boot, como nome de arquivo de cena compilada
@@ -37,6 +39,30 @@ struct RendererConfig {
     std::string windowTitle = "Engine"; ///< Título da janela.
     int windowWidth = 1280;             ///< Largura da janela, em pixels.
     int windowHeight = 720;             ///< Altura da janela, em pixels.
+
+    /**
+     * @brief Um alias de input resolvido do project.conf.
+     *
+     * @c key (nome lógico usado nos scripts, ex.: "moveUp") -> @c value (nome da
+     * tecla no padrão dos keycodes de JavaScript, ex.: "ArrowUp"), com o
+     * @c eventType indicando quando o callback dispara.
+     */
+    struct InputAlias {
+        std::string key;   ///< Nome lógico (chave do script).
+        std::string value; ///< Nome da tecla (estilo JS).
+        Yume::KeyEventType eventType = Yume::KeyEventType::KeyDown; ///< Quando disparar o callback.
+    };
+
+    /**
+     * @brief Aliases de input, por nome lógico.
+     *
+     * Preenchido do bloco opcional `"input": { "aliases": [...] }` do
+     * project.conf. Cada entrada mapeia um nome lógico para um nome de tecla
+     * estilo JavaScript e um tipo de evento (`"keydown"` padrão / `"keyhold"`).
+     * A tradução de nome -> KeyCode nativo acontece por plataforma no input
+     * (ver key_names.hpp), já que cada backend representa teclas de um jeito.
+     */
+    std::unordered_map<std::string, InputAlias> inputAliases;
 };
 
 /**

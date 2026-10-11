@@ -48,6 +48,18 @@ class ScriptComponent : public Component {
     yumescript::Value buildThisObject();
     /** @brief Monta o objeto `transform` do dono, acessível via `this.transform`. */
     yumescript::Value buildTransformObject();
+    /**
+     * @brief Monta o objeto global `Yume`, com a API `Yume.InputSystem`.
+     *
+     * Liga o script ao sistema de input do engine (via ScriptServices):
+     *  - `onAction(alias, fn)`: registra um callback para uma ação do
+     *    project.conf; o engine o dispara conforme o eventType do alias
+     *    (keydown/keyhold/keyup) e entrega o dt do frame.
+     *  - `isPressed/wasPressed/wasReleased(alias)`: polling do estado/bordas da
+     *    tecla da ação, para uso no update().
+     * A resolução alias -> KeyCode da plataforma usa key_names.hpp.
+     */
+    yumescript::Value buildYumeObject();
 };
 
 #endif // SCRIPT_COMPONENT_HPP

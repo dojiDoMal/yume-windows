@@ -78,6 +78,48 @@ Value Interpreter::call(const Value& callee, std::vector<Value>& args, int line)
     }
     if (callee.type == ValueType::Function) {
         const ScriptFunction& fn = *callee.function;
+
+        // Função anônima (lambda). Dois formatos de corpo:
+        //  - inline: uma expressão, cujo valor é o retorno.
+        //  - bloco: statements indentados, com suporte a `return`.
+        if (fn.lambda) {
+            const FunctionExpr& decl = *fn.lambda;
+            if (args.size() != decl.params.size()) {
+                throw RuntimeError("Função anônima espera " + std::to_string(decl.params.size()) +
+                                       " argumento(s), recebeu " + std::to_string(args.size()),
+                                   line);
+            }
+
+            auto callEnv = std::make_shared<Environment>(fn.closure);
+            for (size_t i = 0; i < decl.params.size(); i++) {
+                callEnv->define(decl.params[i], args[i]);
+            }
+
+            if (decl.isBlock) {
+                // Mesmo protocolo de 'return' das funções nomeadas.
+                returning = false;
+                returnValue = Value::nil();
+                executeBlock(decl.blockBody, callEnv);
+                Value out = returning ? returnValue : Value::nil();
+                returning = false;
+                returnValue = Value::nil();
+                return out;
+            }
+
+            // Corpo inline: avalia a expressão no ambiente estendido.
+            auto previous = environment;
+            environment = callEnv;
+            Value out;
+            try {
+                out = evaluate(*decl.body);
+            } catch (...) {
+                environment = previous;
+                throw;
+            }
+            environment = previous;
+            return out;
+        }
+
         const FunctionStmt& decl = *fn.decl;
 
         if (args.size() != decl.params.size()) {
@@ -292,6 +334,15 @@ void Interpreter::visitCall(const CallExpr& expr) {
         args.push_back(evaluate(*arg));
     }
     result = call(callee, args, expr.line);
+}
+
+void Interpreter::visitFunctionExpr(const FunctionExpr& expr) {
+    // Cria um valor chamável que captura o escopo atual (closure). O corpo
+    // (expressão inline) só é avaliado quando a função for chamada.
+    auto fn = std::make_shared<ScriptFunction>();
+    fn->lambda = &expr;
+    fn->closure = environment;
+    result = Value::makeFunction(fn);
 }
 
 void Interpreter::visitMember(const MemberExpr& expr) {

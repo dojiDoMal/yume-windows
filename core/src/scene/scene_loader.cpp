@@ -387,11 +387,17 @@ void SceneLoader::loadScriptComponent(WorldObject* obj, const ComponentData& com
 void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledScene* scene) {
     LOG_INFO("Loading " + std::to_string(scene->worldObjectCount) + " world objects");
 
+    // Guarda os objetos criados na ordem do arquivo para resolver o parentesco
+    // (por índice) numa segunda passada — o pai pode vir depois do filho.
+    std::vector<WorldObject*> created;
+    created.reserve(scene->worldObjectCount);
+
     for (uint32_t i = 0; i < scene->worldObjectCount; i++) {
         auto& woData = scene->worldObjects[i];
         auto* obj = manager->createObject();
+        created.push_back(obj);
 
-        // Carregar transform
+        // Carregar transform (local; o parentesco é resolvido depois)
         obj->getTransform().setPosition(woData.position);
         obj->getTransform().setRotation(woData.rotation);
         obj->getTransform().setScale(woData.scale);
@@ -437,6 +443,22 @@ void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledSc
                 break;
             }
         }
+    }
+
+    // Segunda passada: resolve parentIndex -> ponteiro, agora que todos os
+    // objetos existem. Índice inválido (fora de faixa ou apontando pra si
+    // mesmo) é ignorado com aviso, deixando o objeto como raiz.
+    for (uint32_t i = 0; i < scene->worldObjectCount; i++) {
+        int32_t p = scene->worldObjects[i].parentIndex;
+        if (p < 0)
+            continue; // raiz
+        if (static_cast<uint32_t>(p) >= scene->worldObjectCount || static_cast<uint32_t>(p) == i) {
+            LOG_WARN("WorldObject #" + std::to_string(i) + " tem parentIndex inválido (" +
+                     std::to_string(p) + "); tratado como raiz");
+            continue;
+        }
+        created[i]->setParent(created[static_cast<uint32_t>(p)]);
+        LOG_INFO("WorldObject #" + std::to_string(i) + " parent -> #" + std::to_string(p));
     }
 }
 

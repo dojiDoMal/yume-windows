@@ -28,8 +28,14 @@
  */
 class WorldObject {
   private:
-    Transform transform;                                ///< Transformação do objeto.
+    Transform transform; ///< Transformação local (relativa ao pai).
     std::vector<std::unique_ptr<Component>> components; ///< Componentes anexados (posse exclusiva).
+
+    // Hierarquia de cena. 'parent' é um ponteiro observador (a posse de todos os
+    // objetos é do WorldObjectManager); 'children' lista os filhos diretos para
+    // consultas/propagação. Objeto raiz tem parent == nullptr.
+    WorldObject* parent = nullptr;      ///< Pai na hierarquia, ou nullptr se for raiz.
+    std::vector<WorldObject*> children; ///< Filhos diretos (não-donos).
 
     // TODO: Remover uso de mesh e sprite diretamente
     std::shared_ptr<Mesh> mesh;
@@ -41,10 +47,55 @@ class WorldObject {
     // TODO: esse gettransform poderia por baixo dos panos chamar getComponent<Transform>
     // e o transform ficar dentro do vetor de componentes ?? só teria um transform mesmo...
 
-    /** @brief Retorna a transformação do objeto. */
+    /** @brief Retorna a transformação LOCAL do objeto (relativa ao pai). */
     Transform& getTransform();
-    /** @brief Retorna a transformação do objeto (somente leitura). */
+    /** @brief Retorna a transformação local do objeto (somente leitura). */
     const Transform& getTransform() const;
+
+    /**
+     * @brief Define o pai deste objeto na hierarquia (parenting).
+     *
+     * A transformação do objeto passa a ser interpretada como LOCAL ao pai: a
+     * posição/rotação de mundo é a do pai combinada com a local (ver
+     * getWorldMatrix). Passar @c nullptr torna o objeto uma raiz. Mantém as
+     * listas de filhos coerentes (remove do pai antigo, adiciona no novo).
+     *
+     * @note Não detecta ciclos; a cena é responsável por montar uma árvore
+     *       válida (o loader resolve a partir de índices do arquivo).
+     */
+    void setParent(WorldObject* newParent);
+    /** @brief Retorna o pai, ou nullptr se o objeto for raiz. */
+    WorldObject* getParent() const { return parent; }
+    /** @brief Retorna os filhos diretos (ponteiros não-donos). */
+    const std::vector<WorldObject*>& getChildren() const { return children; }
+
+    /**
+     * @brief Matriz de mundo do objeto: pai combinado com a transformação local.
+     *
+     * Raiz: igual à model matrix local. Com pai:
+     * @c parent->getWorldMatrix() * getTransform().getModelMatrix(). É o que o
+     * renderer e a câmera devem usar para posicionar o objeto no mundo.
+     *
+     * @note Recomputada a cada chamada (sobe a cadeia de pais). Sem cache de
+     *       mundo por ora — simples e correto; otimização (cache + invalidação
+     *       em cascata) fica para depois se o perfil pedir.
+     */
+    Matrix4 getWorldMatrix() const;
+
+    /** @brief Posição do objeto no espaço de mundo (translação da world matrix). */
+    Vector3 getWorldPosition() const;
+
+    /**
+     * @brief Rotação de mundo (Euler), somando os ângulos pela cadeia de pais.
+     *
+     * @warning Aproximação: ângulos de Euler não compõem linearmente no caso
+     *          geral. A soma por eixo é correta quando as rotações dos
+     *          ancestrais e a local atuam em eixos que não se misturam (ex.:
+     *          yaw no pai, pitch no filho — o caso típico de FPS). Para
+     *          composição exata seria necessário decompor a world matrix (ou
+     *          usar quatérnions), o que fica como melhoria futura.
+     */
+    Vector3 getWorldRotation() const;
 
     /**
      * @brief Anexa um componente ao objeto, assumindo sua posse.

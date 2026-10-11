@@ -23,20 +23,30 @@ namespace Yume {
  */
 class N3DSInput : public IInput {
   public:
-    void processEvents() override;
-    void bindKey(KeyCode key, std::function<void()> callback) override;
+    void processEvents(float deltaTime) override;
+    void bindKey(KeyCode key, std::function<void(float)> callback,
+                 KeyEventType eventType = KeyEventType::KeyDown) override;
     bool getQuitEvent() override;
     void requestQuit() override;
     bool isKeyPressed(KeyCode key) override;
+    bool wasKeyPressed(KeyCode key) override;
+    bool wasKeyReleased(KeyCode key) override;
 
   private:
+    /// @brief Callback de um botão + quando ele deve disparar.
+    struct Binding {
+        std::function<void(float)> callback;
+        KeyEventType eventType = KeyEventType::KeyDown;
+    };
+
     bool quitRequested = false;
     // Nomes propositalmente diferentes de hidKeysDown()/hidKeysHeld() da libctru
     // para não colidir com as funções (um campo "keysDown" sombrearia a função
     // e "keysDown = hidKeysDown()" viraria atribuição à função).
-    unsigned int downMask = 0; ///< Máscara de teclas pressionadas neste frame.
+    unsigned int downMask = 0; ///< Máscara de teclas que baixaram neste frame (borda).
     unsigned int heldMask = 0; ///< Máscara de teclas mantidas pressionadas.
-    std::unordered_map<KeyCode, std::function<void()>> keyBindings;
+    unsigned int upMask = 0;   ///< Máscara de teclas que subiram neste frame (borda).
+    std::unordered_map<KeyCode, Binding> keyBindings;
 };
 
 } // namespace Yume

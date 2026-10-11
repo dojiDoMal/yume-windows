@@ -47,6 +47,8 @@ const char* tokenTypeName(TokenType type) {
         return "SLASH";
     case TokenType::ASSIGN:
         return "ASSIGN";
+    case TokenType::ARROW:
+        return "ARROW";
     case TokenType::PLUS_ASSIGN:
         return "PLUS_ASSIGN";
     case TokenType::MINUS_ASSIGN:
@@ -225,7 +227,7 @@ void Lexer::lexToken() {
         lexIdentifier();
         return;
     }
-    if (c == '"') {
+    if (c == '"' || c == '\'') {
         lexString();
         return;
     }
@@ -245,7 +247,15 @@ void Lexer::lexToken() {
         add(match('=') ? TokenType::SLASH_ASSIGN : TokenType::SLASH, "/", startLine, startCol);
         return;
     case '=':
-        add(match('=') ? TokenType::EQ : TokenType::ASSIGN, "=", startLine, startCol);
+        if (match('=')) {
+            add(TokenType::EQ, "==", startLine, startCol);
+            return;
+        }
+        if (match('>')) {
+            add(TokenType::ARROW, "=>", startLine, startCol);
+            return;
+        }
+        add(TokenType::ASSIGN, "=", startLine, startCol);
         return;
     case '!':
         if (match('=')) {
@@ -297,9 +307,12 @@ void Lexer::lexNumber() {
 
 void Lexer::lexString() {
     int startLine = line, startCol = column;
-    advance(); // aspa de abertura
+    // Strings podem ser delimitadas por aspas duplas ou simples; o fechamento
+    // precisa casar com a aspa de abertura. Isso aceita tanto "texto" quanto
+    // 'texto' (estilo JavaScript), útil em chamadas como on('moveUp', ...).
+    char quote = advance(); // aspa de abertura (" ou ')
     std::string value;
-    while (!atEnd() && peek() != '"') {
+    while (!atEnd() && peek() != quote) {
         char c = advance();
         if (c == '\\' && !atEnd()) {
             char esc = advance();
@@ -312,6 +325,9 @@ void Lexer::lexString() {
                 break;
             case '"':
                 value += '"';
+                break;
+            case '\'':
+                value += '\'';
                 break;
             case '\\':
                 value += '\\';
@@ -326,7 +342,7 @@ void Lexer::lexString() {
     }
     if (atEnd())
         throw LexError("String não terminada", startLine, startCol);
-    advance(); // aspa de fechamento
+    advance(); // aspa de fechamento (casa com a de abertura)
     add(TokenType::STRING, value, startLine, startCol);
 }
 

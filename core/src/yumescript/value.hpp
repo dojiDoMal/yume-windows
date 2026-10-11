@@ -20,6 +20,7 @@
 namespace yumescript {
 
 struct FunctionStmt; // declarada em ast.hpp
+struct FunctionExpr; // declarada em ast.hpp
 class Environment;   // declarada em interpreter.hpp
 
 class Value;
@@ -41,9 +42,17 @@ struct ObjectValue {
     std::vector<std::string> members;                          ///< Nomes conhecidos.
 };
 
-/// @brief Função definida no script: nó da AST + ambiente de captura (closure).
+/**
+ * @brief Função definida no script: nó da AST + ambiente de captura (closure).
+ *
+ * Pode ser uma de duas formas, nunca ambas:
+ *  - @c decl: declaração nomeada (`function nome ...:` com corpo em bloco).
+ *  - @c lambda: função anônima (`function <params> : <expressão>` inline).
+ * O interpretador escolhe como executar conforme qual ponteiro está presente.
+ */
 struct ScriptFunction {
-    const FunctionStmt* decl = nullptr;
+    const FunctionStmt* decl = nullptr;   ///< Declaração nomeada (corpo em bloco), ou nullptr.
+    const FunctionExpr* lambda = nullptr; ///< Função anônima (corpo inline), ou nullptr.
     std::shared_ptr<Environment> closure;
 };
 

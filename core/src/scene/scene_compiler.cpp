@@ -219,6 +219,10 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
         auto& wo = worldObjects[i];
         auto& woData = scene.worldObjects[i];
 
+        // Parentesco: índice do objeto pai no array "worldObjects", ou -1 (raiz).
+        // Opcional; ausente = raiz. O zero-init deixaria 0, então setamos sempre.
+        woData.parentIndex = wo.value("parent", -1);
+
         // Transform (sempre presente)
         if (wo.contains("transform")) {
             auto& transform = wo["transform"];

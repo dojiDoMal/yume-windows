@@ -199,8 +199,8 @@ void OpenGLRendererBackend::bindCamera(Camera* camera) {
 
     Matrix4 model = Matrix4(1.0f);
 
-    const auto camPos = cameraObj->getTransform().getPosition();
-    const auto camRot = cameraObj->getTransform().getRotation();
+    const auto camPos = cameraObj->getWorldPosition();
+    const auto camRot = cameraObj->getWorldRotation();
 
     // Calcular forward vector da rotação (OpenGL usa Z negativo como forward)
     Vector3 forward;
@@ -299,7 +299,7 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
             group.mesh = mesh;
             group.material = mat;
         }
-        group.models.push_back(obj->getTransform().getModelMatrix());
+        group.models.push_back(obj->getWorldMatrix());
     }
 
     static bool printed = false;
@@ -344,7 +344,7 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
         auto* mesh = obj->getMesh();
         auto* program = mat->getShaderProgramSingle();
 
-        Matrix4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getWorldMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -371,7 +371,7 @@ void OpenGLRendererBackend::renderWorldObjects(const std::vector<WorldObject*>& 
         if (!spriteRenderer || !spriteRenderer->getMaterial())
             continue;
 
-        Matrix4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getWorldMatrix();
         glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix4), model.data());
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -428,7 +428,7 @@ void OpenGLRendererBackend::renderSkybox(const Mesh& mesh, unsigned int shaderPr
 
     glDepthFunc(GL_LEQUAL);
 
-    const auto camPos = cameraObj->getTransform().getPosition(); // Mudar auto& para const auto
+    const auto camPos = cameraObj->getWorldPosition(); // posição de mundo (skybox centrado nela)
     Matrix4 camView =
         Yume::Math::lookAt({camPos.x, camPos.y, camPos.z}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
 

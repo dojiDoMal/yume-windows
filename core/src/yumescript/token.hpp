@@ -38,6 +38,7 @@ enum class TokenType {
     STAR,         ///< `*`
     SLASH,        ///< `/`
     ASSIGN,       ///< `=`
+    ARROW,        ///< `=>` (função anônima / lambda)
     PLUS_ASSIGN,  ///< `+=`
     MINUS_ASSIGN, ///< `-=`
     STAR_ASSIGN,  ///< `*=`

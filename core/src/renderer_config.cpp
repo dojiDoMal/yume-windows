@@ -28,6 +28,24 @@ GraphicsAPI parseApi(const std::string& raw, GraphicsAPI fallback) {
     return fallback;
 }
 
+// Case-insensitive string -> KeyEventType. Unknown values warn and fall back to
+// KeyDown so a typo in project.conf never hard-fails the boot.
+Yume::KeyEventType parseEventType(const std::string& raw) {
+    std::string s = raw;
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (s == "keydown" || s == "down" || s == "press" || s == "pressed")
+        return Yume::KeyEventType::KeyDown;
+    if (s == "keyhold" || s == "hold" || s == "held")
+        return Yume::KeyEventType::KeyHold;
+    if (s == "keyup" || s == "up" || s == "release" || s == "released")
+        return Yume::KeyEventType::KeyUp;
+
+    LOG_WARN("Unknown input eventType '" + raw + "', keeping default (keydown)");
+    return Yume::KeyEventType::KeyDown;
+}
+
 } // namespace
 
 RendererConfig loadRendererConfig(const std::string& path) {
@@ -86,6 +104,33 @@ RendererConfig loadRendererConfig(const std::string& path) {
 
         if (w.contains("height") && w["height"].is_number_integer())
             config.windowHeight = w["height"].get<int>();
+    }
+
+    // Optional input block. Reads "input": { "aliases": [ { "key": ...,
+    // "value": ... } ] } into a name->keyname map. Each entry is independent;
+    // malformed entries are skipped with a warning so one typo never aborts
+    // the whole config. Fully optional like every other block.
+    if (j.contains("input") && j["input"].is_object()) {
+        const auto& in = j["input"];
+        if (in.contains("aliases") && in["aliases"].is_array()) {
+            for (const auto& entry : in["aliases"]) {
+                if (!entry.is_object() || !entry.contains("key") || !entry.contains("value") ||
+                    !entry["key"].is_string() || !entry["value"].is_string()) {
+                    LOG_WARN("Skipping malformed input alias entry in " + path);
+                    continue;
+                }
+                RendererConfig::InputAlias alias;
+                alias.key = entry["key"].get<std::string>();
+                alias.value = entry["value"].get<std::string>();
+                // eventType is optional; defaults to keydown. Unknown values
+                // warn and fall back to keydown so a typo never aborts the boot.
+                alias.eventType = Yume::KeyEventType::KeyDown;
+                if (entry.contains("eventType") && entry["eventType"].is_string()) {
+                    alias.eventType = parseEventType(entry["eventType"].get<std::string>());
+                }
+                config.inputAliases[alias.key] = alias;
+            }
+        }
     }
 
     return config;

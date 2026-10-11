@@ -61,7 +61,7 @@ void Renderer::render(const Scene& scene) {
     // Atualizar LOD
     WorldObject* camObj = camera->getOwner();
     if (camObj) {
-        Vector3 camPos = camObj->getTransform().getPosition();
+        Vector3 camPos = camObj->getWorldPosition();
 
         for (auto& obj : scene.getObjectManager()->getObjects()) {
             auto* lodGroup = obj->getComponent<LodGroup>();
@@ -80,7 +80,7 @@ void Renderer::render(const Scene& scene) {
                 }
             }
 
-            Vector3 objPos = obj->getTransform().getPosition();
+            Vector3 objPos = obj->getWorldPosition();
 
             bool visible =
                 lodGroup->update(objPos, radius, camPos, camera->getFov(), camera->getHeight());
@@ -94,8 +94,8 @@ void Renderer::render(const Scene& scene) {
     Frustum frustum;
     bool frustumValid = false;
     if (backend->isFrustumCullingEnabled() && camObj) {
-        const auto camPos = camObj->getTransform().getPosition();
-        const auto camRot = camObj->getTransform().getRotation();
+        const auto camPos = camObj->getWorldPosition();
+        const auto camRot = camObj->getWorldRotation();
 
         float yawRad = Yume::Math::radians(camRot.y);
         float pitchRad = Yume::Math::radians(camRot.x);
@@ -137,7 +137,7 @@ void Renderer::render(const Scene& scene) {
         if (frustumValid && obj->hasMesh()) {
             auto* mesh = obj->getMesh();
             if (mesh && mesh->hasBounds()) {
-                Matrix4 model = obj->getTransform().getModelMatrix();
+                Matrix4 model = obj->getWorldMatrix();
                 const Vector3& bc = mesh->getBoundingCenter();
                 Vector4 worldCenter = model * Vector4{bc.x, bc.y, bc.z, 1.0f};
 

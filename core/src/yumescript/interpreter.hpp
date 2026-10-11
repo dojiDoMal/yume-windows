@@ -25,8 +25,7 @@ namespace yumescript {
 /// @brief Erro em tempo de execução (variável indefinida, tipo inválido, etc.).
 class RuntimeError : public std::runtime_error {
   public:
-    RuntimeError(const std::string& msg, int line)
-        : std::runtime_error(msg), line(line) {}
+    RuntimeError(const std::string& msg, int line) : std::runtime_error(msg), line(line) {}
     int line; ///< Linha aproximada do erro no script.
 };
 
@@ -111,6 +110,7 @@ class Interpreter : public ExprVisitor, public StmtVisitor {
     void visitCall(const CallExpr&) override;
     void visitMember(const MemberExpr&) override;
     void visitAssign(const AssignExpr&) override;
+    void visitFunctionExpr(const FunctionExpr&) override;
 
     // StmtVisitor
     void visitLet(const LetStmt&) override;

@@ -15,6 +15,12 @@ Parser::Parser(std::vector<Token> tokens) : tokens(std::move(tokens)) {}
 // --- helpers de token --------------------------------------------------------
 
 const Token& Parser::peek() const { return tokens[current]; }
+const Token& Parser::peekAt(size_t offset) const {
+    size_t i = current + offset;
+    if (i >= tokens.size())
+        i = tokens.size() - 1; // último é END_OF_FILE
+    return tokens[i];
+}
 const Token& Parser::previous() const { return tokens[current - 1]; }
 bool Parser::atEnd() const { return peek().type == TokenType::END_OF_FILE; }
 
@@ -48,6 +54,36 @@ void Parser::skipNewlines() {
 
 void Parser::error(const Token& tok, const std::string& msg) {
     throw ParseError(msg, tok.line, tok.column);
+}
+
+bool Parser::isArrowLambdaAhead() const {
+    // Pré-condição: peek() é '('. Procura a forma exata de uma lista de
+    // parâmetros de lambda — '(' seguido de zero-ou-mais identificadores
+    // separados por vírgula, ')' — e exige um '=>' logo após o ')'. Qualquer
+    // outra coisa (ex.: '(' expr ')') não é lambda e cai no caminho de
+    // expressão agrupada. Faz só lookahead; não consome tokens.
+    if (!check(TokenType::LPAREN))
+        return false;
+
+    size_t i = 1; // offset relativo ao '(' atual
+    // Lista de params vazia: '()'.
+    if (peekAt(i).type == TokenType::RPAREN)
+        return peekAt(i + 1).type == TokenType::ARROW;
+
+    // Um ou mais identificadores separados por vírgula.
+    while (true) {
+        if (peekAt(i).type != TokenType::IDENTIFIER)
+            return false;
+        i++;
+        if (peekAt(i).type == TokenType::COMMA) {
+            i++;
+            continue;
+        }
+        break;
+    }
+    if (peekAt(i).type != TokenType::RPAREN)
+        return false;
+    return peekAt(i + 1).type == TokenType::ARROW;
 }
 
 // --- programa e statements ---------------------------------------------------
@@ -84,7 +120,12 @@ StmtPtr Parser::letStatement() {
     stmt->name = name.lexeme;
     stmt->line = line;
     if (match(TokenType::ASSIGN)) {
+        // Inicializador de 'let' é contexto de statement: uma lambda arrow aqui
+        // pode ter corpo em bloco (`let f = (dt) => : ...`).
+        bool prev = allowLambdaBlock;
+        allowLambdaBlock = true;
         stmt->initializer = expression();
+        allowLambdaBlock = prev;
     }
     expect(TokenType::NEWLINE, "fim de linha após declaração 'let'");
     return stmt;
@@ -149,7 +190,12 @@ StmtPtr Parser::expressionStatement() {
     int line = peek().line;
     auto stmt = std::make_unique<ExprStmt>();
     stmt->line = line;
+    // Statement de expressão também é contexto de statement: permite bloco de
+    // lambda numa atribuição solta como `obj.handler = (e) => : ...`.
+    bool prev = allowLambdaBlock;
+    allowLambdaBlock = true;
     stmt->expr = expression();
+    allowLambdaBlock = prev;
     expect(TokenType::NEWLINE, "fim de linha após expressão");
     return stmt;
 }
@@ -291,18 +337,74 @@ ExprPtr Parser::finishCall(ExprPtr callee) {
     auto callExpr = std::make_unique<CallExpr>();
     callExpr->line = paren.line;
     callExpr->callee = std::move(callee);
+    // Dentro dos argumentos, uma lambda arrow NÃO pode ter corpo em bloco: um
+    // bloco indentado aqui emitiria NEWLINE/INDENT no meio dos parênteses. Só a
+    // forma inline `(params) => expr` é aceita como argumento.
+    bool prev = allowLambdaBlock;
+    allowLambdaBlock = false;
     if (!check(TokenType::RPAREN)) {
         do {
             callExpr->args.push_back(expression());
         } while (match(TokenType::COMMA));
     }
+    allowLambdaBlock = prev;
     expect(TokenType::RPAREN, "')' para fechar a lista de argumentos");
     return callExpr;
+}
+
+ExprPtr Parser::functionExpression() {
+    const Token& kw = advance(); // 'function'
+    auto fn = std::make_unique<FunctionExpr>();
+    fn->line = kw.line;
+    // Em posição de expressão a função é sempre anônima: todo identificador
+    // antes do ':' é um parâmetro (não há nome, ao contrário da declaração de
+    // topo `function nome ...:`).
+    while (check(TokenType::IDENTIFIER)) {
+        fn->params.push_back(advance().lexeme);
+    }
+    expect(TokenType::COLON, "':' antes do corpo da função anônima");
+    // Corpo inline: uma única expressão avaliada a cada chamada.
+    fn->body = expression();
+    return fn;
+}
+
+ExprPtr Parser::arrowFunctionExpression() {
+    const Token& lp = advance(); // '('
+    auto fn = std::make_unique<FunctionExpr>();
+    fn->line = lp.line;
+
+    // Lista de parâmetros: '()' ou '(ident, ident, ...)'.
+    if (!check(TokenType::RPAREN)) {
+        do {
+            const Token& p = expect(TokenType::IDENTIFIER, "nome de parâmetro na lambda");
+            fn->params.push_back(p.lexeme);
+        } while (match(TokenType::COMMA));
+    }
+    expect(TokenType::RPAREN, "')' para fechar os parâmetros da lambda");
+    expect(TokenType::ARROW, "'=>' após os parâmetros da lambda");
+
+    // Corpo em bloco (`=> :`) ou inline (uma expressão). O bloco só é permitido
+    // em contexto de statement; dentro de uma chamada, allowLambdaBlock é false
+    // e um ':' aqui é erro — evita NEWLINE/INDENT presos entre parênteses.
+    if (check(TokenType::COLON)) {
+        if (!allowLambdaBlock) {
+            error(peek(), "lambda com corpo em bloco ('=> :') não é permitida dentro de uma "
+                          "chamada; atribua a uma variável com 'let' e passe a variável");
+        }
+        fn->isBlock = true;
+        fn->blockBody = block();
+    } else {
+        fn->isBlock = false;
+        fn->body = expression();
+    }
+    return fn;
 }
 
 ExprPtr Parser::primary() {
     const Token& tok = peek();
     switch (tok.type) {
+    case TokenType::FUNCTION:
+        return functionExpression();
     case TokenType::NUMBER:
         advance();
         return LiteralExpr::makeNumber(tok.number);
@@ -322,6 +424,10 @@ ExprPtr Parser::primary() {
         advance();
         return std::make_unique<IdentifierExpr>(tok.lexeme, tok.line);
     case TokenType::LPAREN: {
+        // '(' pode iniciar uma lambda arrow `(params) => ...` ou uma expressão
+        // agrupada `( expr )`. O lookahead decide sem ambiguidade.
+        if (isArrowLambdaAhead())
+            return arrowFunctionExpression();
         advance();
         ExprPtr expr = expression();
         expect(TokenType::RPAREN, "')' para fechar a expressão agrupada");

@@ -30,6 +30,11 @@ struct BinaryExpr;
 struct CallExpr;
 struct MemberExpr;
 struct AssignExpr;
+struct FunctionExpr;
+
+// Declaração adiantada de Stmt: a lambda com corpo em bloco (FunctionExpr)
+// guarda uma lista de statements, mas Stmt só é definido mais abaixo.
+struct Stmt;
 
 /// @brief Visitante das expressões. Implementado pelo interpretador.
 struct ExprVisitor {
@@ -41,6 +46,7 @@ struct ExprVisitor {
     virtual void visitCall(const CallExpr&) = 0;
     virtual void visitMember(const MemberExpr&) = 0;
     virtual void visitAssign(const AssignExpr&) = 0;
+    virtual void visitFunctionExpr(const FunctionExpr&) = 0;
 };
 
 /// @brief Base de todas as expressões.
@@ -136,6 +142,30 @@ struct AssignExpr : Expr {
     ExprPtr value;
     int line = 0;
     void accept(ExprVisitor& v) const override { v.visitAssign(*this); }
+};
+
+/**
+ * @brief Função anônima (lambda) em posição de expressão.
+ *
+ * Sintaxe arrow: `(param, ...) => corpo`. Duas formas de corpo:
+ *  - Inline (uma expressão): `(dt) => this.transform.position.z += dt`. Avaliada
+ *    a cada chamada; o valor da expressão é o retorno. Pode aparecer em qualquer
+ *    lugar, inclusive como argumento de chamada.
+ *  - Bloco (multilinha): `(dt) => :` seguido de bloco indentado. Só é permitida
+ *    em contexto de statement (ex.: `let f = (dt) => : ...`), nunca inline dentro
+ *    de uma chamada, para não misturar NEWLINE/INDENT dentro de parênteses.
+ *
+ * Diferente da FunctionStmt (declaração nomeada de topo), a lambda nunca tem
+ * nome e captura o escopo onde apareceu (closure). @c isBlock seleciona qual
+ * corpo é válido: @c body (expressão) quando false, @c blockBody quando true.
+ */
+struct FunctionExpr : Expr {
+    std::vector<std::string> params; ///< Parâmetros da lambda.
+    bool isBlock = false;            ///< true = corpo em bloco; false = expressão inline.
+    ExprPtr body;                    ///< Corpo inline (quando !isBlock).
+    std::vector<std::unique_ptr<Stmt>> blockBody; ///< Corpo em bloco (quando isBlock).
+    int line = 0;
+    void accept(ExprVisitor& v) const override { v.visitFunctionExpr(*this); }
 };
 
 // --- Statements ---------------------------------------------------------------

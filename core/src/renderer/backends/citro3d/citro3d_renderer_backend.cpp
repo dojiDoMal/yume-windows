@@ -162,8 +162,8 @@ void Citro3DRendererBackend::bindCamera(Camera* camera) {
         return;
     }
 
-    const auto camPos = cameraObj->getTransform().getPosition();
-    const auto camRot = cameraObj->getTransform().getRotation();
+    const auto camPos = cameraObj->getWorldPosition();
+    const auto camRot = cameraObj->getWorldRotation();
 
     // View matrix construída a partir do MESMO vetor forward (yaw/pitch) que os
     // demais backends (OpenGL/Vulkan/D3D12/WebGL) usam, seguido de um lookAt.

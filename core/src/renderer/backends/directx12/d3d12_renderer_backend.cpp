@@ -391,8 +391,8 @@ void D3D12RendererBackend::bindCamera(Camera* camera) {
 
     Matrix4 model = Matrix4(1.0f);
 
-    const auto camPos = cameraObj->getTransform().getPosition();
-    const auto camRot = cameraObj->getTransform().getRotation();
+    const auto camPos = cameraObj->getWorldPosition();
+    const auto camRot = cameraObj->getWorldRotation();
 
     // Forward vector from yaw/pitch. Kept identical to the OpenGL backend so
     // camera controls (main.cpp WASD) behave the same across both APIs.
@@ -586,7 +586,7 @@ void D3D12RendererBackend::renderWorldObjects(const std::vector<WorldObject*>& o
             group.mesh = mesh;
             group.material = mat;
         }
-        group.models.push_back(obj->getTransform().getModelMatrix());
+        group.models.push_back(obj->getWorldMatrix());
     }
 
     // Reserve the whole frame's instance matrices up front (all instanced
@@ -641,7 +641,7 @@ void D3D12RendererBackend::renderWorldObjects(const std::vector<WorldObject*>& o
         if (!lights.empty())
             mat->applyLight(*lights[0]);
 
-        Matrix4 model = obj->getTransform().getModelMatrix();
+        Matrix4 model = obj->getWorldMatrix();
         D3D12_GPU_VIRTUAL_ADDRESS instanceAddr = appendInstanceData(&model, 1);
         if (instanceAddr)
             commandList->SetGraphicsRootShaderResourceView(3, instanceAddr);

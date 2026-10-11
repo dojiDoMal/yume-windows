@@ -41,6 +41,7 @@ class Parser {
 
     // --- helpers de token ---
     const Token& peek() const;
+    const Token& peekAt(size_t offset) const; ///< Token à frente, para lookahead.
     const Token& previous() const;
     bool atEnd() const;
     bool check(TokenType type) const;
@@ -48,6 +49,18 @@ class Parser {
     const Token& advance();
     const Token& expect(TokenType type, const std::string& what);
     void skipNewlines();
+
+    /// @brief Decide se a partir do '(' atual começa uma lambda `(params) =>`.
+    bool isArrowLambdaAhead() const;
+
+    /**
+     * @brief Quando @c true, uma lambda arrow pode ter corpo em bloco (`=> :`).
+     *
+     * Verdadeiro só em contexto de statement (ex.: inicializador de `let`,
+     * statement de expressão). Falso dentro de argumentos de chamada, onde um
+     * bloco indentado colidiria com o NEWLINE/INDENT dentro dos parênteses.
+     */
+    bool allowLambdaBlock = false;
 
     // --- statements ---
     StmtPtr declaration();
@@ -69,6 +82,9 @@ class Parser {
     ExprPtr unary();
     ExprPtr call();
     ExprPtr primary();
+    ExprPtr functionExpression(); ///< Função anônima legada: `function <param>* : <expr>`.
+    ExprPtr
+    arrowFunctionExpression(); ///< Lambda arrow: `(params) => expr` ou `(params) => : bloco`.
 
     ExprPtr finishCall(ExprPtr callee);
 
