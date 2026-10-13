@@ -1224,7 +1224,9 @@ void VulkanRendererBackend::present(void* window) {
 // Texture loading
 // ---------------------------------------------------------------------------
 
-unsigned int VulkanRendererBackend::loadTexture(const std::string& path, uint8_t filterType) {
+unsigned int VulkanRendererBackend::loadTexture(const std::string& path, uint8_t filterType,
+                                                bool srgb) {
+    (void)srgb;
     int width, height, channels;
     // Force RGBA so the upload format is always R8G8B8A8_UNORM.
     stbi_uc* pixels = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);

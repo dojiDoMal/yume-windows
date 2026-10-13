@@ -24,6 +24,14 @@ class OpenGLRendererBackend : public RendererBackend {
     GLuint matricesUBO = 0;
     GLuint materialDataUBO = 0;
     GLuint lightDataUBO = 0;
+    GLuint skyboxUBO = 0;
+
+    // Texturas 1x1 de fallback, usadas quando um material não fornece um mapa:
+    // branco (albedo/roughness/metallic) e normal plana (0.5,0.5,1). Assim o
+    // Sample() no shader PBR é sempre válido mesmo sem a textura.
+    GLuint defaultWhiteTex = 0;
+    GLuint defaultNormalTex = 0;
+    GLuint defaultBlackTex = 0;
     std::unordered_map<std::string, GLuint> uniformBindings;
 
     // Adicionar nos campos privados:
@@ -57,10 +65,19 @@ class OpenGLRendererBackend : public RendererBackend {
 
     void initSpriteQuad();
 
+    /**
+     * @brief Vincula as texturas PBR de um material às unidades de textura 0..3
+     *        e seta os samplers correspondentes no programa.
+     * @param material Material com os handles de textura (0 = ausente).
+     * @param program  Handle GL do programa de shader atualmente em uso.
+     */
+    void applyMaterialTextures(Material* material, GLuint program);
+
   public:
     ~OpenGLRendererBackend();
 
-    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
+    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0,
+                             bool srgb = false) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
     void present(void* window) override;

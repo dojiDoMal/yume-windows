@@ -42,11 +42,19 @@ struct LightData {
     // float position[3];
 };
 
-/// @brief Material: caminhos dos shaders de vértice/fragmento e cor base.
+/// @brief Material: shaders, cor base e caminhos das texturas PBR.
+///
+/// Os quatro caminhos de textura são opcionais (string vazia = ausente) e
+/// seguem o fluxo PBR metallic/roughness: albedo (cor base), normal map,
+/// roughness e metallic. São apenas PATHs, nunca bytes (invariante do formato).
 struct MaterialData {
     char vertexShaderPath[256];
     char fragmentShaderPath[256];
     ColorRGBA color;
+    char albedoMap[256];    ///< Textura de cor base (albedo). Vazio = sem textura.
+    char normalMap[256];    ///< Normal map (tangent-space). Vazio = sem textura.
+    char roughnessMap[256]; ///< Mapa de rugosidade. Vazio = sem textura.
+    char metallicMap[256];  ///< Mapa metálico. Vazio = sem textura.
 };
 
 /// @brief Textura: caminho, dimensões, fator de escala e filtro.
@@ -91,12 +99,45 @@ enum class ComponentType : uint8_t {
     LIGHT = 4,
     TEXT_RENDERER = 5,
     LOD_GROUP = 6,
-    SCRIPT = 7
+    SCRIPT = 7,
+    RIGIDBODY = 8,       ///< Corpo rígido: massa, gravidade e velocidade.
+    BOX_COLLIDER = 9,    ///< Volume de colisão em caixa (AABB local).
+    PLANE_COLLIDER = 10, ///< Volume de colisão em plano infinito (chão).
+    SPHERE_COLLIDER = 11 ///< Volume de colisão em esfera.
 };
 
 /// @brief Dados do componente de script: caminho do arquivo .ys.
 struct ScriptComponentData {
     char scriptPath[256]; ///< Caminho do arquivo YumeScript (.ys) a executar.
+};
+
+/// @brief Dados do componente de corpo rígido no formato de disco.
+struct RigidbodyComponentData {
+    float mass;              ///< Massa do corpo (kg). Deve ser > 0.
+    float gravityScale;      ///< Multiplicador da gravidade global.
+    float restitution;       ///< Elasticidade do quique [0,1].
+    float friction;          ///< Atrito de contato (>= 0); gera o rolamento.
+    Vector3 velocity;        ///< Velocidade linear inicial (unidades/s).
+    Vector3 angularVelocity; ///< Velocidade angular inicial (rad/s).
+    bool useGravity;         ///< @c true se a gravidade é aplicada.
+};
+
+/// @brief Dados do collider em caixa (AABB) no formato de disco.
+struct BoxColliderComponentData {
+    Vector3 halfExtents; ///< Metade do tamanho em cada eixo.
+    Vector3 center;      ///< Centro, relativo à posição do dono.
+};
+
+/// @brief Dados do collider em plano infinito no formato de disco.
+struct PlaneColliderComponentData {
+    Vector3 normal; ///< Normal do plano (unitária).
+    float offset;   ///< Deslocamento ao longo da normal, a partir do dono.
+};
+
+/// @brief Dados do collider em esfera no formato de disco.
+struct SphereColliderComponentData {
+    float radius;   ///< Raio da esfera.
+    Vector3 center; ///< Centro, relativo à posição do dono.
 };
 
 /// @brief Tipo de fonte usada por um renderer de texto. MSDF = multi-channel signed distance field.
@@ -178,6 +219,10 @@ struct ComponentData {
         TextRendererComponentData textRenderer;
         LodGroupData lodGroup;
         ScriptComponentData script;
+        RigidbodyComponentData rigidbody;
+        BoxColliderComponentData boxCollider;
+        PlaneColliderComponentData planeCollider;
+        SphereColliderComponentData sphereCollider;
     };
 };
 
@@ -216,7 +261,19 @@ struct WorldObjectData {
 // foi incrementado (0x45 'E' -> 0x46) ao adicionar WorldObjectData::parentIndex,
 // que mudou o sizeof e invalidou .scnb antigos. Arquivos com o magic velho são
 // rejeitados pelo loader (recompile a cena).
-static constexpr uint32_t SCENE_MAGIC = 0x53434E46; ///< 'SCN' + versão de layout (0x46).
+// Versão 0x47: MaterialData ganhou 4 caminhos de textura PBR (albedo/normal/
+// roughness/metallic), mudando o sizeof. .scnb com magic anterior (0x46) são
+// rejeitados — recompile as cenas.
+// Versão 0x48: ComponentData ganhou os membros de física (rigidbody/boxCollider/
+// planeCollider) na union e o enum ComponentType ganhou RIGIDBODY/BOX_COLLIDER/
+// PLANE_COLLIDER. A union já era grande o bastante, mas o bump garante que
+// .scnb antigos (que não conhecem os novos tipos) sejam recompilados.
+// Versão 0x49: ComponentType ganhou SPHERE_COLLIDER e a union ganhou o membro
+// sphereCollider. Novo bump para rejeitar .scnb antigos que não conhecem o tipo.
+// Versão 0x4A: RigidbodyComponentData ganhou friction + velocity +
+// angularVelocity iniciais (dinâmica rotacional), mudando o sizeof. Recompile
+// as cenas.
+static constexpr uint32_t SCENE_MAGIC = 0x53434E4A; ///< 'SCN' + versão de layout (0x4A).
 
 /// @brief Cabeçalho do arquivo de cena: assinatura e número de objetos.
 struct SceneHeader {

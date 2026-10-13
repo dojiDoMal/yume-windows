@@ -217,20 +217,29 @@ void Citro3DRendererBackend::applyMatrices(const Transform& transform, void* sha
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uProjection, &projMtx);
 
     if (uModelView >= 0) {
-        // Monta a model matrix com as funções do citro3d (mesma convenção da
-        // view/projeção), a partir do Transform do objeto: escala -> rotação
-        // (X,Y,Z) -> translação. Depois modelView = view * model.
-        const auto pos = transform.getPosition();
-        const auto rot = transform.getRotation();
-        const auto scl = transform.getScale();
+        // Usa a MESMA model matrix que todos os outros backends: a do engine,
+        // construída a partir do quatérnion do Transform (getModelMatrix =
+        // T·R(quat)·S). Antes montávamos a matriz na mão com Mtx_RotateX/Y/Z do
+        // citro3d a partir dos ângulos de Euler; mas as funções de rotação do
+        // libctru usam uma convenção de sentido diferente da do engine, então a
+        // rotação vinda da física (quatérnion -> Euler -> Mtx_Rotate*) saía com
+        // o SENTIDO INVERTIDO no 3DS (a esfera girava ao contrário). Consumir a
+        // matriz do engine elimina essa divergência: a orientação no 3DS passa a
+        // ser idêntica à do desktop.
+        //
+        // Conversão de layout: o Matrix4 do engine é COLUMN-MAJOR (cols[c].v[r]
+        // = elemento (linha r, coluna c)); o C3D_Mtx é acessado por LINHA
+        // (r[row].x/y/z/w = colunas 0..3 daquela linha). Então transpomos ao
+        // copiar: a linha i do C3D_Mtx recebe (cols[0..3].v[i]).
+        const Matrix4 model = transform.getModelMatrix();
 
         C3D_Mtx modelMtx;
-        Mtx_Identity(&modelMtx);
-        Mtx_Translate(&modelMtx, pos.x, pos.y, pos.z, true);
-        Mtx_RotateX(&modelMtx, Yume::Math::radians(rot.x), true);
-        Mtx_RotateY(&modelMtx, Yume::Math::radians(rot.y), true);
-        Mtx_RotateZ(&modelMtx, Yume::Math::radians(rot.z), true);
-        Mtx_Scale(&modelMtx, scl.x, scl.y, scl.z);
+        for (int row = 0; row < 4; row++) {
+            modelMtx.r[row].x = model[0][row];
+            modelMtx.r[row].y = model[1][row];
+            modelMtx.r[row].z = model[2][row];
+            modelMtx.r[row].w = model[3][row];
+        }
 
         C3D_Mtx modelView;
         Mtx_Multiply(&modelView, &viewMtx, &modelMtx);
@@ -383,9 +392,11 @@ void Citro3DRendererBackend::renderWorldObjects(const std::vector<WorldObject*>&
 // para cumprir a interface RendererBackend sem quebrar o build/execução.
 // ---------------------------------------------------------------------------
 
-unsigned int Citro3DRendererBackend::loadTexture(const std::string& path, uint8_t filterType) {
+unsigned int Citro3DRendererBackend::loadTexture(const std::string& path, uint8_t filterType,
+                                                 bool srgb) {
     (void)path;
     (void)filterType;
+    (void)srgb;
     // TODO (texturas): carregar .t3x via Tex3DS_TextureImport e devolver um id.
     LOG_WARN("loadTexture not implemented on Citro3D backend yet");
     return 0;

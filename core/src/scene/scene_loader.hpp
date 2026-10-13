@@ -54,6 +54,10 @@ class SceneLoader {
     void loadTextRendererComponent(WorldObject* obj, const ComponentData& comp);
     void loadLodGroupComponent(WorldObject* obj, const ComponentData& comp);
     void loadScriptComponent(WorldObject* obj, const ComponentData& comp);
+    void loadRigidbodyComponent(WorldObject* obj, const ComponentData& comp);
+    void loadBoxColliderComponent(WorldObject* obj, const ComponentData& comp);
+    void loadPlaneColliderComponent(WorldObject* obj, const ComponentData& comp);
+    void loadSphereColliderComponent(WorldObject* obj, const ComponentData& comp);
 
   public:
     SceneLoader();

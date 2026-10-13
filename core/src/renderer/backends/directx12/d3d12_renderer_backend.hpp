@@ -133,7 +133,8 @@ class D3D12RendererBackend : public RendererBackend {
   public:
     ~D3D12RendererBackend();
 
-    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
+    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0,
+                             bool srgb = false) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
     void bindCamera(Camera* camera) override;

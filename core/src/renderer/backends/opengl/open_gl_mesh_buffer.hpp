@@ -9,15 +9,19 @@
 #endif
 
 class OpenGLMeshBuffer : public MeshBuffer {
-private:
+  private:
     GLuint VAO = 0;
     GLuint positionVBO = 0;
     GLuint normalVBO = 0;
+    GLuint texCoordVBO = 0;
+    GLuint tangentVBO = 0;
 
-public:
+  public:
     ~OpenGLMeshBuffer() override;
-    
-    bool createBuffers(const std::vector<float>& vertices, const std::vector<float>& normals) override;
+
+    bool createBuffers(const std::vector<float>& vertices, const std::vector<float>& normals,
+                       const std::vector<float>& texCoords = {},
+                       const std::vector<float>& tangents = {}) override;
     void bind() override;
     void unbind() override;
     void destroy() override;

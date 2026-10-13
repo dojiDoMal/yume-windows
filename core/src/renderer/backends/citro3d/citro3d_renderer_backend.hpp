@@ -44,7 +44,8 @@ class Citro3DRendererBackend : public RendererBackend {
   public:
     ~Citro3DRendererBackend() override;
 
-    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) override;
+    unsigned int loadTexture(const std::string& path, uint8_t filterType = 0,
+                             bool srgb = false) override;
     void drawSprite(const Sprite& sprite) override;
     bool init() override;
     void present(void* window) override;

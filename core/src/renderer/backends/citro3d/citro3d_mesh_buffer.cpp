@@ -12,7 +12,9 @@ void* Citro3DMeshBuffer::getHandle() const {
 }
 
 bool Citro3DMeshBuffer::createBuffers(const std::vector<float>& vertices,
-                                      const std::vector<float>& normals) {
+                                      const std::vector<float>& normals,
+                                      const std::vector<float>& texCoords,
+                                      const std::vector<float>& tangents) {
     destroy();
 
     if (vertices.empty() || vertices.size() % 3 != 0)

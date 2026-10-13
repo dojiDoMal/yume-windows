@@ -1,11 +1,14 @@
 #define CLASS_NAME "Renderer"
 #include "log_macros.hpp"
 
+#include "assets/material.hpp"
+#include "assets/shader_program.hpp"
 #include "components/lod_group.hpp"
 #include "math/math.hpp"
 #include "renderer/frustum.hpp"
 #include "renderer/renderer.hpp"
 #include "renderer/renderer_factory.hpp"
+#include "scene/skybox.hpp"
 #include "scene/world_object.hpp"
 #include <algorithm>
 #include <cmath>
@@ -160,6 +163,25 @@ void Renderer::render(const Scene& scene) {
 
     backend->setFrustumCulledObjects(frustumCulled);
     backend->renderWorldObjects(renderableObjects, lights);
+
+    // Skybox por último: desenhado após os opacos, aproveitando o depth buffer
+    // já preenchido (renderSkybox usa GL_LEQUAL e empurra o cubo para o plano
+    // far), então só os pixels onde nada foi escrito recebem o céu.
+    if (Skybox* skybox = camera->getSkybox()) {
+        Material* skyMat = skybox->getMaterial();
+        Mesh* skyMesh = skybox->getMesh();
+        if (skyMat && skyMesh) {
+            ShaderProgram* program = skyMat->getShaderProgram();
+            if (program && program->isValid()) {
+                // renderSkybox seta uniforms via glGetUniformLocation no handle
+                // cru, então o programa precisa estar ativo antes.
+                program->use();
+                auto handle =
+                    static_cast<unsigned int>(reinterpret_cast<uintptr_t>(program->getHandle()));
+                backend->renderSkybox(*skyMesh, handle, skybox->getTextureID());
+            }
+        }
+    }
 }
 
 void Renderer::present(void* window) {

@@ -18,12 +18,21 @@ class MeshBuffer {
 
     /**
      * @brief Cria os buffers na GPU a partir dos dados da malha.
-     * @param vertices Posições dos vértices (intercaladas conforme o layout).
-     * @param normals  Normais dos vértices.
+     * @param vertices  Posições dos vértices (3 floats por vértice).
+     * @param normals   Normais dos vértices (3 floats por vértice).
+     * @param texCoords Coordenadas de textura (UV, 2 floats por vértice).
+     *                  Pode vir vazio quando a malha não tem UVs.
+     * @param tangents  Tangentes dos vértices (3 floats por vértice), usadas
+     *                  para normal mapping. Pode vir vazio.
      * @return @c true se os buffers foram criados com sucesso.
+     *
+     * @note texCoords e tangents são opcionais: backends que não os usam (ou
+     *       malhas sem UV) recebem vetores vazios e simplesmente os ignoram.
      */
     virtual bool createBuffers(const std::vector<float>& vertices,
-                               const std::vector<float>& normals) = 0;
+                               const std::vector<float>& normals,
+                               const std::vector<float>& texCoords = {},
+                               const std::vector<float>& tangents = {}) = 0;
 
     /** @brief Ativa o buffer para as próximas chamadas de desenho. */
     virtual void bind() = 0;

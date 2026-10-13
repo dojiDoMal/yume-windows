@@ -8,23 +8,25 @@
 class D3D12RendererBackend;
 
 class D3D12MeshBuffer : public MeshBuffer {
-private:
+  private:
     D3D12RendererBackend* backend;
     ID3D12Resource* vertexBuffer = nullptr;
     ID3D12Resource* normalBuffer = nullptr;
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
     D3D12_VERTEX_BUFFER_VIEW normalBufferView = {};
-    
-public:
+
+  public:
     D3D12MeshBuffer(D3D12RendererBackend* backend) : backend(backend) {}
     ~D3D12MeshBuffer();
-    
-    bool createBuffers(const std::vector<float>& vertices, const std::vector<float>& normals) override;
+
+    bool createBuffers(const std::vector<float>& vertices, const std::vector<float>& normals,
+                       const std::vector<float>& texCoords = {},
+                       const std::vector<float>& tangents = {}) override;
     void bind() override;
     void unbind() override;
     void destroy() override;
     void* getHandle() const override;
-    
+
     D3D12_VERTEX_BUFFER_VIEW* getVertexBufferView() { return &vertexBufferView; }
     D3D12_VERTEX_BUFFER_VIEW* getNormalBufferView() { return &normalBufferView; }
 };

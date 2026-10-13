@@ -19,11 +19,13 @@
  */
 class Mesh {
   private:
-    std::vector<float> vertices;              ///< Posições dos vértices.
-    std::vector<float> normals;               ///< Normais dos vértices.
-    std::unique_ptr<MeshBuffer> meshBuffer;   ///< Buffer correspondente na GPU.
-    int uniqueVertexCount = 0;                ///< Número de vértices únicos.
-    int triangleCount = 0;                    ///< Número de triângulos.
+    std::vector<float> vertices;            ///< Posições dos vértices.
+    std::vector<float> normals;             ///< Normais dos vértices.
+    std::vector<float> texCoords;           ///< Coordenadas de textura (UV).
+    std::vector<float> tangents;            ///< Tangentes (para normal mapping).
+    std::unique_ptr<MeshBuffer> meshBuffer; ///< Buffer correspondente na GPU.
+    int uniqueVertexCount = 0;              ///< Número de vértices únicos.
+    int triangleCount = 0;                  ///< Número de triângulos.
 
     Vector3 boundingCenter{0.0f, 0.0f, 0.0f}; ///< Centro da esfera envolvente (espaço local).
     float boundingRadius = 0.0f;              ///< Raio da esfera envolvente.
@@ -43,6 +45,14 @@ class Mesh {
     void setNormals(const std::vector<float>& n);
     /** @brief Retorna as normais da malha. */
     const std::vector<float>& getNormals() const;
+    /** @brief Define as coordenadas de textura (UV) da malha. */
+    void setTexCoords(const std::vector<float>& uv);
+    /** @brief Retorna as coordenadas de textura (UV) da malha. */
+    const std::vector<float>& getTexCoords() const;
+    /** @brief Define as tangentes da malha (para normal mapping). */
+    void setTangents(const std::vector<float>& t);
+    /** @brief Retorna as tangentes da malha. */
+    const std::vector<float>& getTangents() const;
 
     /**
      * @brief Envia a geometria para a GPU e calcula a esfera envolvente.

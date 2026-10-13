@@ -8,17 +8,22 @@
 #include "assets/material.hpp"
 #include "assets/shader_asset.hpp"
 #include "assets/stb_image.h"
+#include "components/box_collider.hpp"
 #include "components/camera.hpp"
 #include "components/light.hpp"
 #include "components/lod_group.hpp"
 #include "components/mesh_renderer.hpp"
+#include "components/plane_collider.hpp"
+#include "components/rigidbody.hpp"
 #include "components/script_component.hpp"
+#include "components/sphere_collider.hpp"
 #include "components/sprite_renderer.hpp"
 #include "components/text_renderer_component.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "scene/scene_format.hpp"
 #include "scene/scene_loader.hpp"
 #include "scene/skybox.hpp"
+#include <cmath>
 #include <fstream>
 
 SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
@@ -54,6 +59,20 @@ std::unique_ptr<Material> SceneLoader::createMaterial(const MaterialData& matDat
     if (!material->init())
         return nullptr;
 
+    // Texturas PBR (opcionais). Caminho vazio = sem textura. Albedo é carregado
+    // como sRGB; os demais mapas (normal/roughness/metallic) são dados lineares.
+    // Filtro LINEAR (1) para suavizar; a geração de mipmaps é feita no backend.
+    auto loadMap = [&](const char* relPath, bool srgb) -> unsigned int {
+        if (relPath[0] == '\0')
+            return 0;
+        return rendererBackend->loadTexture(Yume::resolveAssetPath(relPath), 1, srgb);
+    };
+
+    material->setAlbedoMap(loadMap(matData.albedoMap, true));
+    material->setNormalMap(loadMap(matData.normalMap, false));
+    material->setRoughnessMap(loadMap(matData.roughnessMap, false));
+    material->setMetallicMap(loadMap(matData.metallicMap, false));
+
     return material;
 }
 
@@ -64,7 +83,8 @@ void SceneLoader::loadLodGroupComponent(WorldObject* obj, const ComponentData& c
     auto& c = matData.color;
     std::string matKey = std::string(matData.vertexShaderPath) + "|" + matData.fragmentShaderPath +
                          "|" + std::to_string(c.r) + std::to_string(c.g) + std::to_string(c.b) +
-                         std::to_string(c.a);
+                         std::to_string(c.a) + "|" + matData.albedoMap + "|" + matData.normalMap +
+                         "|" + matData.roughnessMap + "|" + matData.metallicMap;
 
     auto matIt = materialCache.find(matKey);
     if (matIt == materialCache.end()) {
@@ -151,11 +171,15 @@ void SceneLoader::loadMeshRendererComponent(WorldObject* obj, const ComponentDat
         return;
     }
 
-    // chave única por combinação de shaders + cor
+    // chave única por combinação de shaders + cor + texturas PBR. As texturas
+    // ENTRAM na chave: sem elas, materiais com os mesmos shaders/cor mas mapas
+    // diferentes (chão/árvore/toco) colidiriam e todos reusariam o primeiro.
     auto& c = materialData.color;
     std::string matKey = std::string(materialData.vertexShaderPath) + "|" +
                          materialData.fragmentShaderPath + "|" + std::to_string(c.r) +
-                         std::to_string(c.g) + std::to_string(c.b) + std::to_string(c.a);
+                         std::to_string(c.g) + std::to_string(c.b) + std::to_string(c.a) + "|" +
+                         materialData.albedoMap + "|" + materialData.normalMap + "|" +
+                         materialData.roughnessMap + "|" + materialData.metallicMap;
 
     auto matIt = materialCache.find(matKey);
     if (matIt == materialCache.end()) {
@@ -229,6 +253,11 @@ void SceneLoader::loadCameraComponent(WorldObject* obj, const ComponentData& com
         unsigned int cubemapID = rendererBackend->createCubemapTexture(faces);
         skybox->setTextureID(cubemapID);
         skybox->setMaterial(std::move(skyboxMaterial));
+        // A malha do cubo do skybox precisa de um MeshBuffer de GPU antes de
+        // configure() (feito dentro de init()); diferente das malhas de .obj,
+        // o Skybox não passa pelo loadObjMesh, então criamos o buffer aqui.
+        if (Mesh* skyMesh = skybox->getMesh())
+            skyMesh->setMeshBuffer(rendererBackend->createMeshBuffer());
         skybox->init();
         camera->setSkybox(std::move(skybox));
     }
@@ -279,6 +308,51 @@ void SceneLoader::loadLightComponent(WorldObject* obj, const ComponentData& comp
     obj->addComponent(std::move(light));
 }
 
+void SceneLoader::loadRigidbodyComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.rigidbody;
+
+    auto body = std::make_unique<Rigidbody>();
+    body->setMass(data.mass);
+    body->setGravityScale(data.gravityScale);
+    body->setRestitution(data.restitution);
+    body->setFriction(data.friction);
+    body->setUseGravity(data.useGravity);
+    body->setVelocity(data.velocity);
+    body->setAngularVelocity(data.angularVelocity);
+
+    obj->addComponent(std::move(body));
+}
+
+void SceneLoader::loadBoxColliderComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.boxCollider;
+
+    auto collider = std::make_unique<BoxCollider>();
+    collider->setHalfExtents(data.halfExtents);
+    collider->setCenter(data.center);
+
+    obj->addComponent(std::move(collider));
+}
+
+void SceneLoader::loadPlaneColliderComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.planeCollider;
+
+    auto collider = std::make_unique<PlaneCollider>();
+    collider->setNormal(data.normal);
+    collider->setOffset(data.offset);
+
+    obj->addComponent(std::move(collider));
+}
+
+void SceneLoader::loadSphereColliderComponent(WorldObject* obj, const ComponentData& comp) {
+    auto& data = comp.sphereCollider;
+
+    auto collider = std::make_unique<SphereCollider>();
+    collider->setRadius(data.radius);
+    collider->setCenter(data.center);
+
+    obj->addComponent(std::move(collider));
+}
+
 std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& relativePath, bool shadeSmooth) {
     // Resolve once at the entry point so the cache key and the path handed to
     // tinyobj both carry the platform asset root (romfs:/ on consoles).
@@ -300,61 +374,104 @@ std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& relativePath, 
 
     std::vector<float> vertices;
     std::vector<float> normals;
+    std::vector<float> texCoords; // UV (2 floats/vértice)
+    std::vector<float> tangents;  // tangente (3 floats/vértice), para normal map
 
-    if (shadeSmooth && !attrib.normals.empty()) {
-        for (const auto& shape : shapes) {
-            for (const auto& index : shape.mesh.indices) {
-                vertices.push_back(attrib.vertices[3 * index.vertex_index + 0]);
-                vertices.push_back(attrib.vertices[3 * index.vertex_index + 1]);
-                vertices.push_back(attrib.vertices[3 * index.vertex_index + 2]);
+    // Processamos sempre por triângulo (grupos de 3 índices). Isso serve aos
+    // dois modos de sombreamento e permite calcular a tangente por face a
+    // partir das posições e dos UVs — a tangente é compartilhada pelos 3
+    // vértices do triângulo (suficiente para normal mapping desindexado).
+    const bool useObjNormals = shadeSmooth && !attrib.normals.empty();
+    const bool hasUVs = !attrib.texcoords.empty();
 
-                if (index.normal_index >= 0) {
-                    normals.push_back(attrib.normals[3 * index.normal_index + 0]);
-                    normals.push_back(attrib.normals[3 * index.normal_index + 1]);
-                    normals.push_back(attrib.normals[3 * index.normal_index + 2]);
+    for (const auto& shape : shapes) {
+        for (size_t f = 0; f + 2 < shape.mesh.indices.size(); f += 3) {
+            const auto& i0 = shape.mesh.indices[f + 0];
+            const auto& i1 = shape.mesh.indices[f + 1];
+            const auto& i2 = shape.mesh.indices[f + 2];
+
+            float v0[3] = {attrib.vertices[3 * i0.vertex_index + 0],
+                           attrib.vertices[3 * i0.vertex_index + 1],
+                           attrib.vertices[3 * i0.vertex_index + 2]};
+            float v1[3] = {attrib.vertices[3 * i1.vertex_index + 0],
+                           attrib.vertices[3 * i1.vertex_index + 1],
+                           attrib.vertices[3 * i1.vertex_index + 2]};
+            float v2[3] = {attrib.vertices[3 * i2.vertex_index + 0],
+                           attrib.vertices[3 * i2.vertex_index + 1],
+                           attrib.vertices[3 * i2.vertex_index + 2]};
+
+            // Normal da face (fallback para flat shading / quando não há UVs).
+            float edge1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
+            float edge2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
+            float faceN[3] = {edge1[1] * edge2[2] - edge1[2] * edge2[1],
+                              edge1[2] * edge2[0] - edge1[0] * edge2[2],
+                              edge1[0] * edge2[1] - edge1[1] * edge2[0]};
+            float nlen = std::sqrt(faceN[0] * faceN[0] + faceN[1] * faceN[1] + faceN[2] * faceN[2]);
+            if (nlen > 0) {
+                faceN[0] /= nlen;
+                faceN[1] /= nlen;
+                faceN[2] /= nlen;
+            }
+
+            // UVs do triângulo (0 quando a malha não tem coordenadas).
+            auto uvOf = [&](const tinyobj::index_t& idx, float out[2]) {
+                if (hasUVs && idx.texcoord_index >= 0) {
+                    out[0] = attrib.texcoords[2 * idx.texcoord_index + 0];
+                    out[1] = attrib.texcoords[2 * idx.texcoord_index + 1];
+                } else {
+                    out[0] = 0.0f;
+                    out[1] = 0.0f;
+                }
+            };
+            float uv0[2], uv1[2], uv2[2];
+            uvOf(i0, uv0);
+            uvOf(i1, uv1);
+            uvOf(i2, uv2);
+
+            // Tangente da face a partir das posições e deltas de UV.
+            // T = (deltaUV2.y * edge1 - deltaUV1.y * edge2) * r
+            float du1 = uv1[0] - uv0[0], dv1 = uv1[1] - uv0[1];
+            float du2 = uv2[0] - uv0[0], dv2 = uv2[1] - uv0[1];
+            float denom = du1 * dv2 - du2 * dv1;
+            float tangent[3] = {1.0f, 0.0f, 0.0f};
+            if (hasUVs && std::fabs(denom) > 1e-8f) {
+                float r = 1.0f / denom;
+                tangent[0] = r * (dv2 * edge1[0] - dv1 * edge2[0]);
+                tangent[1] = r * (dv2 * edge1[1] - dv1 * edge2[1]);
+                tangent[2] = r * (dv2 * edge1[2] - dv1 * edge2[2]);
+                float tlen = std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+                                       tangent[2] * tangent[2]);
+                if (tlen > 0) {
+                    tangent[0] /= tlen;
+                    tangent[1] /= tlen;
+                    tangent[2] /= tlen;
                 }
             }
-        }
-    } else {
-        for (const auto& shape : shapes) {
-            for (size_t f = 0; f < shape.mesh.indices.size(); f += 3) {
-                auto& i0 = shape.mesh.indices[f + 0];
-                auto& i1 = shape.mesh.indices[f + 1];
-                auto& i2 = shape.mesh.indices[f + 2];
 
-                float v0[3] = {attrib.vertices[3 * i0.vertex_index + 0],
-                               attrib.vertices[3 * i0.vertex_index + 1],
-                               attrib.vertices[3 * i0.vertex_index + 2]};
-                float v1[3] = {attrib.vertices[3 * i1.vertex_index + 0],
-                               attrib.vertices[3 * i1.vertex_index + 1],
-                               attrib.vertices[3 * i1.vertex_index + 2]};
-                float v2[3] = {attrib.vertices[3 * i2.vertex_index + 0],
-                               attrib.vertices[3 * i2.vertex_index + 1],
-                               attrib.vertices[3 * i2.vertex_index + 2]};
+            const tinyobj::index_t* tri[3] = {&i0, &i1, &i2};
+            const float* uvs[3] = {uv0, uv1, uv2};
+            for (int k = 0; k < 3; k++) {
+                const auto& idx = *tri[k];
+                vertices.push_back(attrib.vertices[3 * idx.vertex_index + 0]);
+                vertices.push_back(attrib.vertices[3 * idx.vertex_index + 1]);
+                vertices.push_back(attrib.vertices[3 * idx.vertex_index + 2]);
 
-                float edge1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
-                float edge2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
-                float normal[3] = {edge1[1] * edge2[2] - edge1[2] * edge2[1],
-                                   edge1[2] * edge2[0] - edge1[0] * edge2[2],
-                                   edge1[0] * edge2[1] - edge1[1] * edge2[0]};
-
-                float len =
-                    sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
-                if (len > 0) {
-                    normal[0] /= len;
-                    normal[1] /= len;
-                    normal[2] /= len;
+                if (useObjNormals && idx.normal_index >= 0) {
+                    normals.push_back(attrib.normals[3 * idx.normal_index + 0]);
+                    normals.push_back(attrib.normals[3 * idx.normal_index + 1]);
+                    normals.push_back(attrib.normals[3 * idx.normal_index + 2]);
+                } else {
+                    normals.push_back(faceN[0]);
+                    normals.push_back(faceN[1]);
+                    normals.push_back(faceN[2]);
                 }
 
-                for (int i = 0; i < 3; i++) {
-                    auto& idx = shape.mesh.indices[f + i];
-                    vertices.push_back(attrib.vertices[3 * idx.vertex_index + 0]);
-                    vertices.push_back(attrib.vertices[3 * idx.vertex_index + 1]);
-                    vertices.push_back(attrib.vertices[3 * idx.vertex_index + 2]);
-                    normals.push_back(normal[0]);
-                    normals.push_back(normal[1]);
-                    normals.push_back(normal[2]);
-                }
+                texCoords.push_back(uvs[k][0]);
+                texCoords.push_back(uvs[k][1]);
+
+                tangents.push_back(tangent[0]);
+                tangents.push_back(tangent[1]);
+                tangents.push_back(tangent[2]);
             }
         }
     }
@@ -362,6 +479,12 @@ std::shared_ptr<Mesh> SceneLoader::loadObjMesh(const std::string& relativePath, 
     auto mesh = std::make_shared<Mesh>();
     mesh->setVertices(vertices);
     mesh->setNormals(normals);
+    // Só anexa UV/tangente quando a malha de fato tem UVs; sem isso o VAO não
+    // cria esses atributos e o shader recebe os defaults.
+    if (hasUVs) {
+        mesh->setTexCoords(texCoords);
+        mesh->setTangents(tangents);
+    }
     mesh->setMeshBuffer(rendererBackend->createMeshBuffer());
     mesh->configure();
 
@@ -438,6 +561,22 @@ void SceneLoader::loadWorldObjects(WorldObjectManager* manager, const CompiledSc
             case ComponentType::SCRIPT:
                 LOG_INFO("  - Loading SCRIPT component");
                 loadScriptComponent(obj, comp);
+                break;
+            case ComponentType::RIGIDBODY:
+                LOG_INFO("  - Loading RIGIDBODY component");
+                loadRigidbodyComponent(obj, comp);
+                break;
+            case ComponentType::BOX_COLLIDER:
+                LOG_INFO("  - Loading BOX_COLLIDER component");
+                loadBoxColliderComponent(obj, comp);
+                break;
+            case ComponentType::PLANE_COLLIDER:
+                LOG_INFO("  - Loading PLANE_COLLIDER component");
+                loadPlaneColliderComponent(obj, comp);
+                break;
+            case ComponentType::SPHERE_COLLIDER:
+                LOG_INFO("  - Loading SPHERE_COLLIDER component");
+                loadSphereColliderComponent(obj, comp);
                 break;
             default:
                 break;

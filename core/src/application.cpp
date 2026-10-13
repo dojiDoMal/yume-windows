@@ -134,6 +134,12 @@ bool Application::boot() {
     // owner's Transform and bind its script's start()/update().
     startSceneComponents();
 
+    // Enable the physics simulation now that the scene is loaded. The engine has
+    // no editor "play/stop" yet, so running the app means the simulation plays
+    // immediately. A future editor can call physics().setEnabled(false) in
+    // onInit to hold the scene in its authoring state until the user hits play.
+    physicsWorld.setEnabled(true);
+
     // Project-specific setup runs after the engine is fully up and the scene is
     // loaded, so onInit can safely grab objects from the active scene.
     onInit();
@@ -156,6 +162,13 @@ void Application::updateSceneComponents(float deltaTime) {
     for (auto& obj : scene->getObjectManager()->getObjects()) {
         obj->updateComponents(deltaTime);
     }
+}
+
+void Application::updatePhysics(float deltaTime) {
+    Scene* scene = sceneManager ? sceneManager->getActiveScene() : nullptr;
+    if (!scene)
+        return;
+    physicsWorld.step(scene->getObjectManager(), deltaTime);
 }
 
 void Application::mainLoop() {
@@ -185,6 +198,13 @@ void Application::mainLoop() {
         // run before the project's onUpdate, so project code can react to or
         // override whatever the scripts produced this frame.
         updateSceneComponents(deltaTime);
+
+        // Physics step: integrates gravity and resolves collisions for objects
+        // with a Rigidbody. No-op while the simulation is disabled (the editor's
+        // "play" toggle). Runs after component updates so scripts can set
+        // initial velocities, and before onUpdate/render so project code and the
+        // renderer see the resolved positions this frame.
+        updatePhysics(deltaTime);
 
         // Project-specific per-frame logic (e.g. rotate the cube).
         onUpdate(deltaTime);

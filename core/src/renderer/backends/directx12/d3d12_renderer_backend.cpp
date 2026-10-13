@@ -824,7 +824,9 @@ unsigned int D3D12RendererBackend::createTexture2D(const unsigned char* pixels, 
     return static_cast<unsigned int>(textures.size());
 }
 
-unsigned int D3D12RendererBackend::loadTexture(const std::string& path, uint8_t filterType) {
+unsigned int D3D12RendererBackend::loadTexture(const std::string& path, uint8_t filterType,
+                                               bool srgb) {
+    (void)srgb;
     int width, height, channels;
     // Force 4 channels (RGBA) so the upload format is always R8G8B8A8_UNORM.
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);

@@ -5,14 +5,12 @@ Matrix4 Transform::getModelMatrix() const {
     if (!dirty)
         return cachedMatrix;
 
+    // M = T · R(quat) · S. A rotação vem do quatérnion (orientação canônica);
+    // a matriz de rotação sai idêntica à antiga composição Rx·Ry·Rz quando a
+    // orientação foi construída de um Euler (ver Yume::Math::quatFromEuler).
     cachedMatrix = Matrix4(1.0f);
     cachedMatrix = Yume::Math::translate(cachedMatrix, {position.x, position.y, position.z});
-    cachedMatrix =
-        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.x), {1.0f, 0.0f, 0.0f});
-    cachedMatrix =
-        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.y), {0.0f, 1.0f, 0.0f});
-    cachedMatrix =
-        Yume::Math::rotate(cachedMatrix, Yume::Math::radians(rotation.z), {0.0f, 0.0f, 1.0f});
+    cachedMatrix = cachedMatrix * Yume::Math::quatToMatrix4(orientation);
     cachedMatrix = Yume::Math::scale(cachedMatrix, {scale.x, scale.y, scale.z});
     dirty = false;
     return cachedMatrix;
@@ -25,10 +23,29 @@ void Transform::setPosition(const Vector3& pos) {
     dirty = true;
 }
 
-Vector3 Transform::getRotation() const { return rotation; }
+Vector3 Transform::getRotation() const {
+    // Se a orientação foi setada por quatérnion (física), o Euler em cache está
+    // defasado: reconstrói a partir do quatérnion. Caso contrário devolve o
+    // Euler exato que foi setado (edição por eixo estável).
+    if (eulerStale) {
+        cachedEuler = Yume::Math::quatToEuler(orientation);
+        eulerStale = false;
+    }
+    return cachedEuler;
+}
 
 void Transform::setRotation(const Vector3& rot) {
-    rotation = rot;
+    cachedEuler = rot;
+    eulerStale = false;
+    orientation = Yume::Math::quatFromEuler(rot);
+    dirty = true;
+}
+
+Quaternion Transform::getRotationQuat() const { return orientation; }
+
+void Transform::setRotationQuat(const Quaternion& q) {
+    orientation = Yume::Math::normalize(q);
+    eulerStale = true; // getRotation() vai reconstruir o Euler sob demanda.
     dirty = true;
 }
 

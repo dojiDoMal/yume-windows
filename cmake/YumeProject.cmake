@@ -291,11 +291,14 @@ function(yume_copy_assets OUT_VAR)
     set(_sources)
     file(GLOB _objs "${ARG_PROJECT_DIR}/*.obj")
     file(GLOB _pngs "${ARG_PROJECT_DIR}/*.png")
+    # Texturas PBR e faces de skybox frequentemente vêm em JPG (ambientCG,
+    # Poly Haven). Copiadas verbatim como os PNGs para o lado do executável.
+    file(GLOB _jpgs "${ARG_PROJECT_DIR}/*.jpg" "${ARG_PROJECT_DIR}/*.jpeg")
     # YumeScript sources are copied verbatim (Phase 1: parsed at runtime by the
     # ScriptComponent). The .scn only stores the .ys path, so the file must sit
     # next to the executable like .obj / project.conf.
     file(GLOB _ys "${ARG_PROJECT_DIR}/*.ys")
-    list(APPEND _sources ${_objs} ${_pngs} ${_ys})
+    list(APPEND _sources ${_objs} ${_pngs} ${_jpgs} ${_ys})
     if(EXISTS "${ARG_PROJECT_DIR}/project.conf")
         list(APPEND _sources "${ARG_PROJECT_DIR}/project.conf")
     endif()

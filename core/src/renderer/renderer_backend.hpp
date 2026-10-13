@@ -64,7 +64,16 @@ class RendererBackend {
     bool isFrustumCullingEnabled() const { return frustumCullingEnabled; }
     void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
 
-    virtual unsigned int loadTexture(const std::string& path, uint8_t filterType = 0) = 0;
+    /**
+     * @brief Carrega uma textura 2D e retorna seu handle nativo.
+     * @param path       Caminho do arquivo de imagem.
+     * @param filterType 0=NEAREST, 1=LINEAR.
+     * @param srgb        Se @c true, a textura é tratada como sRGB (albedo/cor);
+     *                    @c false para dados lineares (normal/roughness/metallic).
+     * @return Handle da textura (0 em caso de falha).
+     */
+    virtual unsigned int loadTexture(const std::string& path, uint8_t filterType = 0,
+                                     bool srgb = false) = 0;
     virtual void drawSprite(const Sprite& sprite) = 0;
     virtual bool init() = 0;
     /**

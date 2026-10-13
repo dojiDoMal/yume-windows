@@ -43,6 +43,11 @@ class Timer {
 #endif
     float deltaTime; ///< Duração do último frame, em segundos.
 
+    /// @brief Teto do delta por frame (s). Absorve spikes de pausa do loop
+    /// (arrastar a janela, suspensão do SO, breakpoint) para que nada integre
+    /// um passo gigante. ~0,1s = 10 FPS: abaixo disso a cena só "engasga".
+    static constexpr float MAX_DELTA_TIME = 0.1f;
+
   public:
     /** @brief Constrói o timer e marca o instante inicial. */
     Timer();

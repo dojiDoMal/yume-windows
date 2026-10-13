@@ -27,6 +27,13 @@ class Material {
     ColorRGBA baseColor = COLOR::RED;                   ///< Cor base da superfície.
     bool instancingEnabled = true;                      ///< Se o material usa instancing.
 
+    // Texturas PBR (handles nativos do backend, 0 = ausente). O carregamento
+    // real é feito pelo backend; o Material só guarda os ids para o bind.
+    unsigned int albedoMap = 0;    ///< Handle da textura de albedo.
+    unsigned int normalMap = 0;    ///< Handle do normal map.
+    unsigned int roughnessMap = 0; ///< Handle do mapa de rugosidade.
+    unsigned int metallicMap = 0;  ///< Handle do mapa metálico.
+
   public:
     Material();
 
@@ -63,6 +70,25 @@ class Material {
     bool isInstancingEnabled() const { return instancingEnabled; }
     /** @brief Habilita ou desabilita o instancing. */
     void setInstancingEnabled(bool enabled) { instancingEnabled = enabled; }
+
+    /** @brief Define o handle da textura de albedo (0 = ausente). */
+    void setAlbedoMap(unsigned int id) { albedoMap = id; }
+    /** @brief Retorna o handle da textura de albedo. */
+    unsigned int getAlbedoMap() const { return albedoMap; }
+    /** @brief Define o handle do normal map (0 = ausente). */
+    void setNormalMap(unsigned int id) { normalMap = id; }
+    /** @brief Retorna o handle do normal map. */
+    unsigned int getNormalMap() const { return normalMap; }
+    /** @brief Define o handle do mapa de rugosidade (0 = ausente). */
+    void setRoughnessMap(unsigned int id) { roughnessMap = id; }
+    /** @brief Retorna o handle do mapa de rugosidade. */
+    unsigned int getRoughnessMap() const { return roughnessMap; }
+    /** @brief Define o handle do mapa metálico (0 = ausente). */
+    void setMetallicMap(unsigned int id) { metallicMap = id; }
+    /** @brief Retorna o handle do mapa metálico. */
+    unsigned int getMetallicMap() const { return metallicMap; }
+    /** @brief Indica se o material tem ao menos uma textura PBR. */
+    bool hasTextures() const { return albedoMap || normalMap || roughnessMap || metallicMap; }
 
     /** @brief Define o programa de shader para desenho individual (assume a posse). */
     void setShaderProgramSingle(std::unique_ptr<ShaderProgram> program) {

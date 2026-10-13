@@ -29,6 +29,26 @@
 
 using json = nlohmann::json;
 
+/**
+ * @brief Preenche as 4 texturas PBR de um MaterialData a partir do JSON.
+ *
+ * Lê, quando presentes, os campos "albedoMap", "normalMap", "roughnessMap" e
+ * "metallicMap" do objeto "material". Ausentes viram string vazia (o campo já
+ * vem zero-inicializado), que o loader interpreta como "sem textura".
+ */
+static void compileMaterialTextures(MaterialData& mat, const json& material) {
+    auto copyPath = [](char* dst, size_t cap, const json& material, const char* key) {
+        if (material.contains(key) && material[key].is_string()) {
+            std::string p = material[key].get<std::string>();
+            std::snprintf(dst, cap, "%s", p.c_str());
+        }
+    };
+    copyPath(mat.albedoMap, sizeof(mat.albedoMap), material, "albedoMap");
+    copyPath(mat.normalMap, sizeof(mat.normalMap), material, "normalMap");
+    copyPath(mat.roughnessMap, sizeof(mat.roughnessMap), material, "roughnessMap");
+    copyPath(mat.metallicMap, sizeof(mat.metallicMap), material, "metallicMap");
+}
+
 void compileLodGroup(ComponentData& compData, const json& comp) {
     compData.type = ComponentType::LOD_GROUP;
 
@@ -53,6 +73,7 @@ void compileLodGroup(ComponentData& compData, const json& comp) {
                   sizeof(compData.lodGroup.material.fragmentShaderPath), "%s", fragPath.c_str());
     compData.lodGroup.material.color = {color[0] / 255.0f, color[1] / 255.0f, color[2] / 255.0f,
                                         color[3] / 255.0f};
+    compileMaterialTextures(compData.lodGroup.material, comp["material"]);
 }
 
 void compileMeshRenderer(ComponentData& compData, const json& comp) {
@@ -75,6 +96,7 @@ void compileMeshRenderer(ComponentData& compData, const json& comp) {
 
     compData.meshRenderer.material.color = {color[0] / 255.0f, color[1] / 255.0f, color[2] / 255.0f,
                                             color[3] / 255.0f};
+    compileMaterialTextures(compData.meshRenderer.material, comp["material"]);
 }
 
 void compileSpriteRenderer(ComponentData& compData, const json& comp) {
@@ -203,6 +225,82 @@ void compileScript(ComponentData& compData, const json& comp) {
                   path.c_str());
 }
 
+void compileRigidbody(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::RIGIDBODY;
+    compData.rigidbody.mass = comp.value("mass", 1.0f);
+    compData.rigidbody.gravityScale = comp.value("gravityScale", 1.0f);
+    compData.rigidbody.restitution = comp.value("restitution", 0.0f);
+    compData.rigidbody.friction = comp.value("friction", 0.5f);
+    compData.rigidbody.useGravity = comp.value("useGravity", true);
+
+    // Velocidades iniciais (opcionais). Ausentes = repouso.
+    if (comp.contains("velocity")) {
+        compData.rigidbody.velocity.x = comp["velocity"][0];
+        compData.rigidbody.velocity.y = comp["velocity"][1];
+        compData.rigidbody.velocity.z = comp["velocity"][2];
+    } else {
+        compData.rigidbody.velocity = {0.0f, 0.0f, 0.0f};
+    }
+
+    if (comp.contains("angularVelocity")) {
+        compData.rigidbody.angularVelocity.x = comp["angularVelocity"][0];
+        compData.rigidbody.angularVelocity.y = comp["angularVelocity"][1];
+        compData.rigidbody.angularVelocity.z = comp["angularVelocity"][2];
+    } else {
+        compData.rigidbody.angularVelocity = {0.0f, 0.0f, 0.0f};
+    }
+}
+
+void compileBoxCollider(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::BOX_COLLIDER;
+
+    // halfExtents default (0.5,0.5,0.5): caixa unitária centrada na origem.
+    if (comp.contains("halfExtents")) {
+        compData.boxCollider.halfExtents.x = comp["halfExtents"][0];
+        compData.boxCollider.halfExtents.y = comp["halfExtents"][1];
+        compData.boxCollider.halfExtents.z = comp["halfExtents"][2];
+    } else {
+        compData.boxCollider.halfExtents = {0.5f, 0.5f, 0.5f};
+    }
+
+    if (comp.contains("center")) {
+        compData.boxCollider.center.x = comp["center"][0];
+        compData.boxCollider.center.y = comp["center"][1];
+        compData.boxCollider.center.z = comp["center"][2];
+    } else {
+        compData.boxCollider.center = {0.0f, 0.0f, 0.0f};
+    }
+}
+
+void compilePlaneCollider(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::PLANE_COLLIDER;
+
+    // normal default (0,1,0): plano horizontal apontando para cima (chão).
+    if (comp.contains("normal")) {
+        compData.planeCollider.normal.x = comp["normal"][0];
+        compData.planeCollider.normal.y = comp["normal"][1];
+        compData.planeCollider.normal.z = comp["normal"][2];
+    } else {
+        compData.planeCollider.normal = {0.0f, 1.0f, 0.0f};
+    }
+
+    compData.planeCollider.offset = comp.value("offset", 0.0f);
+}
+
+void compileSphereCollider(ComponentData& compData, const json& comp) {
+    compData.type = ComponentType::SPHERE_COLLIDER;
+
+    compData.sphereCollider.radius = comp.value("radius", 0.5f);
+
+    if (comp.contains("center")) {
+        compData.sphereCollider.center.x = comp["center"][0];
+        compData.sphereCollider.center.y = comp["center"][1];
+        compData.sphereCollider.center.z = comp["center"][2];
+    } else {
+        compData.sphereCollider.center = {0.0f, 0.0f, 0.0f};
+    }
+}
+
 void compileWorldObjects(CompiledScene& scene, const json& j) {
     scene.worldObjectCount = 0;
     scene.worldObjects.clear();
@@ -268,6 +366,14 @@ void compileWorldObjects(CompiledScene& scene, const json& j) {
                     compileLodGroup(woData.components[j], comp);
                 } else if (type == "SCRIPT") {
                     compileScript(woData.components[j], comp);
+                } else if (type == "RIGIDBODY") {
+                    compileRigidbody(woData.components[j], comp);
+                } else if (type == "BOX_COLLIDER") {
+                    compileBoxCollider(woData.components[j], comp);
+                } else if (type == "PLANE_COLLIDER") {
+                    compilePlaneCollider(woData.components[j], comp);
+                } else if (type == "SPHERE_COLLIDER") {
+                    compileSphereCollider(woData.components[j], comp);
                 }
             }
         }

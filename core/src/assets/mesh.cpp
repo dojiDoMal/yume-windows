@@ -6,7 +6,7 @@ bool Mesh::configure() {
     if (!boundsComputed)
         computeBounds();
 
-    bool result = meshBuffer->createBuffers(vertices, normals);
+    bool result = meshBuffer->createBuffers(vertices, normals, texCoords, tangents);
 
     return result;
 }
@@ -51,6 +51,14 @@ const std::vector<float>& Mesh::getVertices() const { return vertices; }
 void Mesh::setNormals(const std::vector<float>& n) { normals = n; }
 
 const std::vector<float>& Mesh::getNormals() const { return normals; }
+
+void Mesh::setTexCoords(const std::vector<float>& uv) { texCoords = uv; }
+
+const std::vector<float>& Mesh::getTexCoords() const { return texCoords; }
+
+void Mesh::setTangents(const std::vector<float>& t) { tangents = t; }
+
+const std::vector<float>& Mesh::getTangents() const { return tangents; }
 
 void Mesh::bind() {
     if (meshBuffer)

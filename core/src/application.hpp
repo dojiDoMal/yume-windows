@@ -3,6 +3,7 @@
 
 #include "engine_context.hpp"
 #include "input/i_input.hpp"
+#include "physics/physics_world.hpp"
 #include "renderer/renderer_backend.hpp"
 #include "renderer_config.hpp"
 #include "scene/scene_manager.hpp"
@@ -65,6 +66,8 @@ class Application {
     IInput& input() { return engine->getInputSystem(); }
     /// @brief Acesso ao backend de renderização ativo.
     RendererBackend* renderer() { return rendererBackend; }
+    /// @brief Acesso ao mundo de física (gravidade, habilitar/desabilitar a simulação).
+    PhysicsWorld& physics() { return physicsWorld; }
     /// @brief Descrição da janela (tamanho, título).
     const WindowDesc& window() const { return winDesc; }
 
@@ -102,7 +105,18 @@ class Application {
      */
     void updateSceneComponents(float deltaTime);
 
+    /**
+     * @brief Avança a simulação de física um passo na cena ativa.
+     * @param deltaTime Tempo do frame, em segundos.
+     *
+     * Rodado a cada frame no mainLoop, depois do update dos componentes e antes
+     * da renderização. Não faz nada se a física estiver desabilitada.
+     */
+    void updatePhysics(float deltaTime);
+
     RendererConfig rendererConfig;
+
+    PhysicsWorld physicsWorld; ///< Simulação de física da cena ativa.
 
     // Declared before screenManager so it outlives it: the DisplayManager
     // destroys the window through multimedia->display() in its destructor, and

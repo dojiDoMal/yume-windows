@@ -70,6 +70,17 @@ void Timer::tick() {
     deltaTime = (float)(currentTime - lastTime) / 1000000000.0f;
     lastTime = currentTime;
 #endif
+
+    // Clamp do delta para absorver "spikes": arrastar/redimensionar a janela,
+    // o SO suspender o processo ou um breakpoint congelam o loop, e o próximo
+    // tick reportaria um dt enorme. Integrar gravidade/velocidade por esse dt
+    // faz objetos "teleportarem" (o pulinho ao soltar a janela). Limitamos o
+    // passo a MAX_DELTA_TIME (~10 FPS): a simulação apenas desacelera num
+    // engasgo, em vez de dar um salto. Protege física, animação e scripts.
+    if (deltaTime > MAX_DELTA_TIME)
+        deltaTime = MAX_DELTA_TIME;
+    if (deltaTime < 0.0f)
+        deltaTime = 0.0f; // relógio não-monotônico: nunca deixa dt negativo.
 }
 
 float Timer::getDeltaTime() const { return deltaTime; }
