@@ -49,6 +49,16 @@ class ScriptComponent : public Component {
     /** @brief Monta o objeto `transform` do dono, acessível via `this.transform`. */
     yumescript::Value buildTransformObject();
     /**
+     * @brief Monta o objeto `sprite` do dono, acessível via `this.sprite`.
+     *
+     * Expõe o controle de recortes do sprite sheet para animação por script:
+     *  - `setFrame(group, index)`: seleciona o frame `index` do grupo `group`.
+     *  - `frameCount(group)`: número de frames do grupo (0 se não existe).
+     *  - `flipX` (membro lê/escreve): espelha o recorte horizontalmente.
+     * Retorna nil se o dono não tem Sprite.
+     */
+    yumescript::Value buildSpriteObject();
+    /**
      * @brief Monta o objeto global `Yume`, com a API `Yume.InputSystem`.
      *
      * Liga o script ao sistema de input do engine (via ScriptServices):

@@ -281,9 +281,9 @@ endfunction()
 # -----------------------------------------------------------------------------
 # yume_copy_assets(<out_var> PROJECT_DIR <dir> OUT_DIR <dir>)
 #
-# Copies non-compiled runtime assets (*.obj, project.conf, *.png) from the
-# project dir into OUT_DIR so everything the engine opens by relative path sits
-# next to the executable. Returns the list of copied destination files.
+# Copies non-compiled runtime assets (*.obj, project.conf, *.png, *.ys, *.ssm)
+# from the project dir into OUT_DIR so everything the engine opens by relative
+# path sits next to the executable. Returns the list of copied destination files.
 # -----------------------------------------------------------------------------
 function(yume_copy_assets OUT_VAR)
     cmake_parse_arguments(ARG "" "PROJECT_DIR;OUT_DIR" "" ${ARGN})
@@ -298,7 +298,11 @@ function(yume_copy_assets OUT_VAR)
     # ScriptComponent). The .scn only stores the .ys path, so the file must sit
     # next to the executable like .obj / project.conf.
     file(GLOB _ys "${ARG_PROJECT_DIR}/*.ys")
-    list(APPEND _sources ${_objs} ${_pngs} ${_jpgs} ${_ys})
+    # Sprite sheets (.ssm): JSON com os recortes de frame. O .scn guarda só o
+    # path do .ssm, então o arquivo precisa estar ao lado do executável como os
+    # demais assets copiados verbatim.
+    file(GLOB _ssm "${ARG_PROJECT_DIR}/*.ssm")
+    list(APPEND _sources ${_objs} ${_pngs} ${_jpgs} ${_ys} ${_ssm})
     if(EXISTS "${ARG_PROJECT_DIR}/project.conf")
         list(APPEND _sources "${ARG_PROJECT_DIR}/project.conf")
     endif()

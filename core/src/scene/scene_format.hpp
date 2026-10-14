@@ -58,12 +58,17 @@ struct MaterialData {
 };
 
 /// @brief Textura: caminho, dimensões, fator de escala e filtro.
+///
+/// @c ssmPath aponta (opcionalmente) para um arquivo @c .ssm que descreve os
+/// recortes do sprite sheet em grupos de frames. Vazio = textura cheia (sem
+/// recorte). Apenas um PATH, nunca bytes (invariante do formato).
 struct TextureData {
     char path[256];
     float width;
     float height;
     float scaleFactor;
     uint8_t filterType; ///< 0=NEAREST, 1=LINEAR.
+    char ssmPath[256];  ///< Caminho do .ssm (recortes); vazio = sem recorte.
 };
 
 /// @brief Malha: caminho do arquivo e se usa sombreamento suave.
@@ -273,7 +278,10 @@ struct WorldObjectData {
 // Versão 0x4A: RigidbodyComponentData ganhou friction + velocity +
 // angularVelocity iniciais (dinâmica rotacional), mudando o sizeof. Recompile
 // as cenas.
-static constexpr uint32_t SCENE_MAGIC = 0x53434E4A; ///< 'SCN' + versão de layout (0x4A).
+// Versão 0x4B: TextureData ganhou ssmPath[256] (caminho do sprite sheet .ssm
+// com os recortes de frame), mudando o sizeof de ComponentData. .scnb com magic
+// anterior (0x4A) são rejeitados — recompile as cenas.
+static constexpr uint32_t SCENE_MAGIC = 0x53434E4B; ///< 'SCN' + versão de layout (0x4B).
 
 /// @brief Cabeçalho do arquivo de cena: assinatura e número de objetos.
 struct SceneHeader {

@@ -13,6 +13,7 @@
 #include "input/input_key.hpp"
 #include "input/key_names.hpp"
 #include "math/vector3.hpp"
+#include "scene/sprite.hpp"
 #include "scene/world_object.hpp"
 #include "yumescript/lexer.hpp"
 #include "yumescript/parser.hpp"
@@ -194,14 +195,70 @@ Value ScriptComponent::buildTransformObject() {
     return Value::makeObject(obj);
 }
 
-Value ScriptComponent::buildThisObject() {
-    Value transform = buildTransformObject();
+Value ScriptComponent::buildSpriteObject() {
+    WorldObject* owner = getOwner();
+    Sprite* sprite = owner ? owner->getSprite() : nullptr;
+    if (!sprite)
+        return Value::nil();
+
+    // setFrame(group, index): seleciona o recorte do sprite sheet. Retorna
+    // true/false conforme o frame existir.
+    auto setFrameFn = [sprite](std::vector<Value>& args) -> Value {
+        if (args.size() != 2 || args[0].type != ValueType::String ||
+            args[1].type != ValueType::Number) {
+            LOG_WARN("this.sprite.setFrame espera (string group, number index)");
+            return Value::makeBool(false);
+        }
+        const std::string& group = *args[0].str;
+        long idx = static_cast<long>(args[1].number);
+        if (idx < 0)
+            return Value::makeBool(false);
+        return Value::makeBool(sprite->setFrame(group, static_cast<size_t>(idx)));
+    };
+
+    // frameCount(group): quantos frames o grupo tem (0 se não existe).
+    auto frameCountFn = [sprite](std::vector<Value>& args) -> Value {
+        if (args.size() != 1 || args[0].type != ValueType::String) {
+            LOG_WARN("this.sprite.frameCount espera (string group)");
+            return Value::makeNumber(0);
+        }
+        return Value::makeNumber(static_cast<double>(sprite->frameCount(*args[0].str)));
+    };
+
+    Value setFrameValue = Value::makeNative(setFrameFn);
+    Value frameCountValue = Value::makeNative(frameCountFn);
 
     auto obj = std::make_shared<ObjectValue>();
-    obj->members = {"transform"};
-    obj->get = [transform](const std::string& name) -> Value {
+    obj->members = {"setFrame", "frameCount", "flipX"};
+    obj->get = [sprite, setFrameValue, frameCountValue](const std::string& name) -> Value {
+        if (name == "setFrame")
+            return setFrameValue;
+        if (name == "frameCount")
+            return frameCountValue;
+        if (name == "flipX")
+            return Value::makeBool(sprite->getFlipX());
+        return Value::nil();
+    };
+    obj->set = [sprite](const std::string& name, const Value& val) {
+        if (name == "flipX")
+            sprite->setFlipX(val.type == ValueType::Bool     ? val.boolean
+                             : val.type == ValueType::Number ? (val.number != 0.0)
+                                                             : false);
+    };
+    return Value::makeObject(obj);
+}
+
+Value ScriptComponent::buildThisObject() {
+    Value transform = buildTransformObject();
+    Value sprite = buildSpriteObject();
+
+    auto obj = std::make_shared<ObjectValue>();
+    obj->members = {"transform", "sprite"};
+    obj->get = [transform, sprite](const std::string& name) -> Value {
         if (name == "transform")
             return transform;
+        if (name == "sprite")
+            return sprite;
         return Value::nil();
     };
     // `this` não é reatribuível em nenhum de seus membros nesta fase.

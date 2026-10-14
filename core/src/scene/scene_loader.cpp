@@ -25,6 +25,7 @@
 #include "scene/skybox.hpp"
 #include <cmath>
 #include <fstream>
+#include <nlohmann/json.hpp>
 
 SceneLoader::SceneLoader() : rendererBackend(nullptr) {}
 
@@ -200,6 +201,77 @@ void SceneLoader::loadMeshRendererComponent(WorldObject* obj, const ComponentDat
     obj->addComponent(std::move(meshRenderer));
 }
 
+// Carrega os recortes de um sprite sheet (.ssm) em um Sprite. O .ssm lista
+// "groups", cada um com "sprites" definidos por points.start/points.end em
+// PIXELS, com origem no canto inferior-esquerdo (estilo OpenGL). Convertemos
+// cada retângulo para UVs normalizados [0,1] usando as dimensões da textura.
+// Resiliente: um arquivo ausente/ inválido só emite LOG_WARN e deixa o sprite
+// sem frames (desenha a textura cheia).
+static void loadSsmIntoSprite(Sprite& sprite, const std::string& ssmPath, float texW, float texH) {
+    if (texW <= 0.0f || texH <= 0.0f) {
+        LOG_WARN("SSM ignorado: dimensões de textura inválidas (" + ssmPath + ")");
+        return;
+    }
+    std::ifstream file(ssmPath);
+    if (!file.is_open()) {
+        LOG_WARN("Não foi possível abrir o sprite sheet (.ssm): " + ssmPath);
+        return;
+    }
+
+    nlohmann::json j;
+    try {
+        file >> j;
+    } catch (const std::exception& e) {
+        LOG_WARN("SSM inválido (" + ssmPath + "): " + e.what());
+        return;
+    }
+
+    if (!j.contains("groups") || !j["groups"].is_array()) {
+        LOG_WARN("SSM sem 'groups' (" + ssmPath + ")");
+        return;
+    }
+
+    int groupIndex = 0;
+    for (const auto& g : j["groups"]) {
+        std::string name = g.value("name", std::string("group") + std::to_string(groupIndex));
+        groupIndex++;
+        if (!g.contains("sprites") || !g["sprites"].is_array())
+            continue;
+
+        std::vector<Sprite::Frame> frames;
+        for (const auto& s : g["sprites"]) {
+            if (!s.contains("points"))
+                continue;
+            const auto& p = s["points"];
+            if (!p.contains("start") || !p.contains("end"))
+                continue;
+
+            float sx = p["start"][0].get<float>();
+            float sy = p["start"][1].get<float>();
+            float ex = p["end"][0].get<float>();
+            float ey = p["end"][1].get<float>();
+
+            Sprite::Frame f;
+            // UVs normalizados. O .ssm já usa origem bottom-left (como o OpenGL),
+            // então mapeamos y direto sem inverter.
+            f.u0 = sx / texW;
+            f.u1 = ex / texW;
+            f.v0 = sy / texH;
+            f.v1 = ey / texH;
+            f.pixelWidth = ex - sx;
+            f.pixelHeight = ey - sy;
+            if (f.pixelWidth <= 0.0f || f.pixelHeight <= 0.0f) {
+                LOG_WARN("Frame com tamanho inválido em " + ssmPath + "; ignorado");
+                continue;
+            }
+            frames.push_back(f);
+        }
+
+        if (!frames.empty())
+            sprite.addGroup(name, std::move(frames));
+    }
+}
+
 void SceneLoader::loadSpriteRendererComponent(WorldObject* obj, const ComponentData& comp) {
     auto& textureData = comp.spriteRenderer.texture;
     auto& materialData = comp.spriteRenderer.material;
@@ -207,10 +279,21 @@ void SceneLoader::loadSpriteRendererComponent(WorldObject* obj, const ComponentD
     float width = textureData.width * textureData.scaleFactor;
     float height = textureData.height * textureData.scaleFactor;
     auto sprite = std::make_unique<Sprite>(width, height);
+    sprite->setScaleFactor(textureData.scaleFactor);
 
     unsigned int texID = rendererBackend->loadTexture(Yume::resolveAssetPath(textureData.path),
                                                       textureData.filterType);
     sprite->setTexture(texID);
+
+    // Sprite sheet opcional: carrega os recortes e seleciona o primeiro frame
+    // do primeiro grupo, dimensionando o quad ao tamanho desse frame.
+    if (textureData.ssmPath[0] != '\0') {
+        loadSsmIntoSprite(*sprite, Yume::resolveAssetPath(textureData.ssmPath), textureData.width,
+                          textureData.height);
+        const std::string& first = sprite->firstGroup();
+        if (!first.empty())
+            sprite->setFrame(first, 0);
+    }
 
     auto material = createMaterial(materialData);
     if (!material) {

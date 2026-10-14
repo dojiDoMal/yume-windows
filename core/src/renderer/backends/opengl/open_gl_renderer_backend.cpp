@@ -610,7 +610,8 @@ void OpenGLRendererBackend::initSpriteQuad() {
 
     glBindVertexArray(spriteVAO);
     glBindBuffer(GL_ARRAY_BUFFER, spriteVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    // DYNAMIC: drawSprite reescreve as UVs do quad por frame (recorte do sheet).
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -669,8 +670,31 @@ unsigned int OpenGLRendererBackend::loadTexture(const std::string& path, uint8_t
 }
 
 void OpenGLRendererBackend::drawSprite(const Sprite& sprite) {
-    LOG_INFO("Drawing sprite - TextureID: " + std::to_string(sprite.getTexture()) + " Width: " +
-             std::to_string(sprite.getWidth()) + " Height: " + std::to_string(sprite.getHeight()));
+    // Se o sprite usa recortes (sprite sheet), reescrevemos as UVs do quad com
+    // o frame atual antes de desenhar; caso contrário, usamos as UVs 0..1 cheias.
+    // Fazer o recorte na geometria (e não via uniform) mantém o shader do
+    // projeto genérico (a UV chega pelo atributo de vértice).
+    {
+        float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+        if (sprite.hasFrames()) {
+            const Sprite::Frame& f = sprite.getCurrentFrame();
+            u0 = f.u0;
+            v0 = f.v0;
+            u1 = f.u1;
+            v1 = f.v1;
+        }
+        // Flip horizontal: troca as coordenadas U esquerda/direita.
+        float uLeft = sprite.getFlipX() ? u1 : u0;
+        float uRight = sprite.getFlipX() ? u0 : u1;
+
+        // Mesmo layout de initSpriteQuad: pos.xyz, uv.xy — 6 vértices (2 tris).
+        float vertices[] = {-0.5f, -0.5f, 0.0f, uLeft,  v0, 0.5f,  -0.5f, 0.0f, uRight, v0,
+                            0.5f,  0.5f,  0.0f, uRight, v1, -0.5f, -0.5f, 0.0f, uLeft,  v0,
+                            0.5f,  0.5f,  0.0f, uRight, v1, -0.5f, 0.5f,  0.0f, uLeft,  v1};
+        glBindBuffer(GL_ARRAY_BUFFER, spriteVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
 
     // Não sobrescrever a matriz model, apenas aplicar a escala do sprite
     // A matriz model já foi configurada em renderGameObjects com o Transform

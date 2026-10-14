@@ -29,6 +29,26 @@
 
 using json = nlohmann::json;
 
+// Diretório do arquivo .scn em compilação. Os paths de asset no .scn são
+// escritos relativos a esse diretório (os assets ficam ao lado do .scn no
+// projeto de autoria). Para SONDAR um asset em build-time (ex.: stbi_info para
+// ler as dimensões da textura), precisamos resolver contra este diretório,
+// porque o CWD do scene_compiler é o diretório de build, não o do projeto. O
+// path GRAVADO no .scnb continua sendo o original (relativo), que o runtime
+// resolve ao lado do executável. Vazio = resolve contra o CWD (comportamento
+// legado quando o .scn está no próprio CWD).
+static std::string g_sceneBaseDir;
+
+/// @brief Resolve um path de asset de autoria contra o diretório do .scn.
+static std::string resolveAgainstSceneDir(const std::string& path) {
+    if (path.empty() || g_sceneBaseDir.empty())
+        return path;
+    // Não prefixar caminhos absolutos.
+    if (path.size() > 1 && (path[1] == ':' || path[0] == '/' || path[0] == '\\'))
+        return path;
+    return g_sceneBaseDir + "/" + path;
+}
+
 /**
  * @brief Preenche as 4 texturas PBR de um MaterialData a partir do JSON.
  *
@@ -105,14 +125,18 @@ void compileSpriteRenderer(ComponentData& compData, const json& comp) {
     std::string texPath = comp["texture"]["path"];
     float scaleFactor = comp["texture"].value("scaleFactor", 1.0f);
     std::string filter = comp["texture"].value("filterType", "NEAREST");
+    // Sprite sheet opcional: caminho do .ssm com os recortes de frame. Ausente
+    // (string vazia) = textura cheia, sem recorte.
+    std::string ssmPath = comp["texture"].value("ssmPath", std::string());
 
     std::string vertPath = comp["material"]["vertexShaderPath"];
     std::string fragPath = comp["material"]["fragmentShaderPath"];
     std::array<int, 4> color = comp["material"]["color"];
 
     int width, height, channels;
-    if (!stbi_info(texPath.c_str(), &width, &height, &channels)) {
-        std::cerr << "Failed to read texture info: " << texPath << std::endl;
+    std::string probePath = resolveAgainstSceneDir(texPath);
+    if (!stbi_info(probePath.c_str(), &width, &height, &channels)) {
+        std::cerr << "Failed to read texture info: " << probePath << std::endl;
         width = height = 1;
     }
 
@@ -123,6 +147,9 @@ void compileSpriteRenderer(ComponentData& compData, const json& comp) {
     compData.spriteRenderer.texture.height = static_cast<float>(height);
     compData.spriteRenderer.texture.scaleFactor = scaleFactor;
     compData.spriteRenderer.texture.filterType = (filter == "LINEAR") ? 1 : 0;
+
+    std::snprintf(compData.spriteRenderer.texture.ssmPath,
+                  sizeof(compData.spriteRenderer.texture.ssmPath), "%s", ssmPath.c_str());
 
     std::snprintf(compData.spriteRenderer.material.vertexShaderPath,
                   sizeof(compData.spriteRenderer.material.vertexShaderPath), "%s",
@@ -390,6 +417,14 @@ int main(int argc, char* argv[]) {
     if (!input.is_open()) {
         std::cerr << "Failed to open input file: " << argv[1] << std::endl;
         return 1;
+    }
+
+    // Diretório do .scn: usado para sondar assets (ex.: dimensões da textura)
+    // em build-time, já que o CWD do compilador é o diretório de build.
+    {
+        std::string in = argv[1];
+        size_t slash = in.find_last_of("/\\");
+        g_sceneBaseDir = (slash == std::string::npos) ? std::string() : in.substr(0, slash);
     }
 
     json j = json::parse(input);
